@@ -10,9 +10,9 @@ Veilcast is a prediction market where the crowd's information stays public and t
 
 A prediction market only works when the price signal is honest. That needs open volume so the odds mean something. It breaks when large players can be tracked, because visible whales cause herding and front-running, which scares off the flow that makes the price accurate. STRK20 lets Veilcast keep both halves: the amounts stay public so the odds are real, the identities stay private so the signal stays clean.
 
-## Why it needs privacy, and what is actually private
+## Why it needs privacy and what is actually private
 
-STRK20 gives identity privacy, not amount privacy, and Veilcast is designed around exactly that split. Being precise here matters for users and for judging. Overclaiming what is hidden is dishonest and it is the fastest way to get the privacy model wrong.
+STRK20 gives identity privacy, not amount privacy. Veilcast is designed around exactly that split. Being precise here matters for users and for judging. Overclaiming what is hidden is dishonest and it is the fastest way to get the privacy model wrong.
 
 | Public | Private |
 |---|---|
@@ -29,7 +29,7 @@ Shielding into the pool is a public, compliance-screened deposit. The privacy be
 
 Veilcast builds on the STRK20 privacy pool and the starter kit's `privacy_invoke` pattern.
 
-1. Shield. A user shields STRK into the pool once. This is a normal public deposit, screened on-chain, and it credits the user a private note.
+1. Shield. A user shields STRK into the pool once. This is a normal public deposit, screened on-chain. It credits the user a private note.
 2. Place a bet. To bet, the pool withdraws the stake into the Veilcast market contract inside one atomic `privacy_invoke` call. The contract records the stake against the chosen outcome and adds it to that outcome's public volume. The transaction is submitted by a rotating shared relayer, so the on-chain sender is the relayer and the bettor's address appears nowhere. The amount and the outcome are public. The bettor is not.
 3. Watch the odds. Odds are read straight off the public per-outcome volume, so the market stays informationally efficient. Everyone sees the same numbers.
 4. Resolve. Each market binds to a resolution source when it is created. Price questions resolve from a Pragma oracle feed. Non-price questions resolve from a named resolver or a vote. Resolution is on-chain and verifiable.
