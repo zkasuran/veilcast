@@ -1,12 +1,4 @@
-target/CACHEDIR.TAG
-target/dev/.fingerprint/
-target/dev/incremental/
-target/dev/*test*
-target/dev/*artifacts*
-target/release/.fingerprint/
-target/release/incremental/
-target/release/*test*
-target/release/*artifacts*
+target/
 .snfoundry_cache/
 snfoundry_trace/
 coverage/
