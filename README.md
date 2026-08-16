@@ -81,11 +81,26 @@ cannot lock the pot either: 30 days past the close, anyone can void the market.
 
 ### Resolution
 
-Each market names one resolver address when it is created, and only that address can settle it. The
-resolver is an address, not a person, so a contract can hold the role: an oracle adapter that reads
-a price feed and calls `resolve` settles a price question without the market itself knowing anything
-about feeds. Whoever opens a market is its resolver by default, which the app says out loud on the
-form.
+Each market names one resolver address when it is created. Only that address can settle it. The
+resolver is an address, not a person, so a contract can hold the role, which is the difference
+between a market you have to trust and one you can check.
+
+Whoever opens a plain market is its resolver, and the app says so on the form.
+
+**Price markets settle themselves.** `cairo/src/pragma_resolver.cairo` is a resolver contract with no
+admin and no owner. Opening a market through it binds the market to a Pragma spot pair and a
+threshold, and afterwards anyone at all can push the feed's median in: at or above the threshold
+settles the first outcome, below settles the second. Whoever sends that transaction pays the fee and
+gets no say in the result. The contract refuses a median with no publishers behind it and one older
+than the window it was deployed with, so a feed that has gone quiet cannot settle a market on a stale
+number. It cannot void either, because a permissionless void would let anyone cancel a live market,
+so a dead feed falls through to the market's own 30-day rule instead.
+
+The Pragma interface is declared in this repo rather than pulled in as an SDK, and checked against
+the live feeds: mainnet `0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b` answered
+`get_data_median(SpotEntry('STRK/USD'))` on 2026-08-16 with 12 publishers at 8 decimals. The app
+shows that median next to a price market before it settles, so the number that will decide the
+question is visible in advance.
 
 Resolution is deliberately public. The terms of a market are not the thing that needs hiding, and a
 settlement nobody can point at is not a settlement. What stays private is who was on each side.
@@ -100,8 +115,10 @@ per market plus one per outcome label.
 
 | | |
 |---|---|
-| Cairo market contract | done, 16 tests green under Starknet Foundry |
-| App: board, bet, positions, private claim, pool actions | done, 29 tests green under vitest |
+| Cairo market contract | done, 24 tests green under Starknet Foundry |
+| Pragma resolver contract | done, covered by those tests against a mock feed |
+| App: board, bet, positions, private claim, feed settlement, pool actions | done, 36 tests green under vitest |
+| Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
 | Declared and deployed | not yet, on either network |
 | Three mainnet pool transactions | not yet |
 
@@ -114,11 +131,14 @@ final.
 ```
 cairo/src/market.cairo               the market: bets, volumes, resolution, claims
 cairo/src/interface.cairo            the ABI, the calldata layout, the error codes
-cairo/src/tests/                     the contract's tests, including a mock of the pool
+cairo/src/pragma_resolver.cairo      the feed resolver: bind a price question, settle it
+cairo/src/pragma.cairo               the slice of the Pragma oracle this repo calls
+cairo/src/tests/                     the contract's tests, including mocks of the pool and the feed
 cairo/scripts/deploy.sh              declare and deploy against a pool
 src/utils/veilcast.ts                coupons, claim signing, pool action lists, odds maths
 src/utils/market.ts                  board reads, payout maths, the public calls
-src/app/components/client/market/    board, bet form, positions, resolver controls
+src/utils/resolver.ts                price questions, feed reads, settlement calls
+src/app/components/client/market/    board, bet form, positions, resolver and feed controls
 src/app/components/client/strk20/    the pool actions and the shared submit path
 strk20.json                          what the sprint hub reads
 ```

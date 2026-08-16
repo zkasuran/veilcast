@@ -86,6 +86,7 @@ export function useStrk20() {
     // every read and every receipt goes through the provider that tracks the current one.
     const provider = constants.myFrontendProviders[providerIndex];
     const marketAddress = constants.marketForIndex(providerIndex);
+    const resolverAddress = constants.resolverForIndex(providerIndex);
 
     async function track(txHash: string, setResult: SetResult, amountLabel: string) {
         setResult({
@@ -162,6 +163,8 @@ export function useStrk20() {
         isStrk20Network: networkName !== undefined,
         marketAddress,
         hasMarket: constants.isDeployedAt(marketAddress),
+        resolverAddress,
+        hasResolver: constants.isDeployedAt(resolverAddress),
         address,
         isConnected,
         walletAccount,

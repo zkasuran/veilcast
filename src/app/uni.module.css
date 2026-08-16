@@ -681,6 +681,18 @@
 .resolverRow .btn { background: #fff; border: 1px solid var(--line); color: #3b3b46; }
 .resolverRow .btnGreen { border-color: #cdeede; color: var(--green); background: var(--green-soft); }
 .resolverNote { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+/* A price market's binding and the median that will settle it. */
+.feedRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.feedLabel { color: var(--muted); }
+.feedValue { color: var(--ink); font-weight: 550; font-variant-numeric: tabular-nums; text-align: right; }
 .createBox {
   margin-bottom: 14px;
   padding: 18px;
@@ -697,6 +709,18 @@
   font-weight: 600;
 }
 .createNote { margin-top: 10px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.feedToggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  color: #3b3b46;
+  font-size: 13.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.feedFields { display: flex; gap: 8px; }
+.feedFields .textInput { flex: 1; }
 
 .positionRow {
   margin-bottom: 12px;

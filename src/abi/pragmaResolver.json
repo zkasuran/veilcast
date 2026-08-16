@@ -1,0 +1,247 @@
+[
+  {
+    "type": "impl",
+    "name": "PragmaResolverImpl",
+    "interface_name": "veilcast::pragma_resolver::IPragmaResolver"
+  },
+  {
+    "type": "struct",
+    "name": "core::byte_array::ByteArray",
+    "members": [
+      {
+        "name": "data",
+        "type": "core::array::Array::<core::bytes_31::bytes31>"
+      },
+      {
+        "name": "pending_word",
+        "type": "core::felt252"
+      },
+      {
+        "name": "pending_word_len",
+        "type": "core::internal::bounded_int::BoundedInt::<0, 30>"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "veilcast::pragma_resolver::PriceQuestion",
+    "members": [
+      {
+        "name": "pair_id",
+        "type": "core::felt252"
+      },
+      {
+        "name": "threshold",
+        "type": "core::integer::u128"
+      }
+    ]
+  },
+  {
+    "type": "interface",
+    "name": "veilcast::pragma_resolver::IPragmaResolver",
+    "items": [
+      {
+        "type": "function",
+        "name": "open_price_market",
+        "inputs": [
+          {
+            "name": "question",
+            "type": "core::byte_array::ByteArray"
+          },
+          {
+            "name": "label_at_or_above",
+            "type": "core::byte_array::ByteArray"
+          },
+          {
+            "name": "label_below",
+            "type": "core::byte_array::ByteArray"
+          },
+          {
+            "name": "close_at",
+            "type": "core::integer::u64"
+          },
+          {
+            "name": "pair_id",
+            "type": "core::felt252"
+          },
+          {
+            "name": "threshold",
+            "type": "core::integer::u128"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::integer::u64"
+          }
+        ],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "settle",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "get_price_question",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "veilcast::pragma_resolver::PriceQuestion"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "read_median",
+        "inputs": [
+          {
+            "name": "pair_id",
+            "type": "core::felt252"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "(core::integer::u128, core::integer::u32, core::integer::u64)"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_market",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_oracle",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_max_price_age",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::integer::u64"
+          }
+        ],
+        "state_mutability": "view"
+      }
+    ]
+  },
+  {
+    "type": "constructor",
+    "name": "constructor",
+    "inputs": [
+      {
+        "name": "market",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "oracle",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "max_price_age",
+        "type": "core::integer::u64"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::pragma_resolver::PragmaResolver::PriceMarketOpened",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      },
+      {
+        "name": "pair_id",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "threshold",
+        "type": "core::integer::u128",
+        "kind": "data"
+      },
+      {
+        "name": "close_at",
+        "type": "core::integer::u64",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::pragma_resolver::PragmaResolver::PriceMarketSettled",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      },
+      {
+        "name": "price",
+        "type": "core::integer::u128",
+        "kind": "data"
+      },
+      {
+        "name": "last_updated_timestamp",
+        "type": "core::integer::u64",
+        "kind": "data"
+      },
+      {
+        "name": "winning_outcome",
+        "type": "core::integer::u8",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::pragma_resolver::PragmaResolver::Event",
+    "kind": "enum",
+    "variants": [
+      {
+        "name": "PriceMarketOpened",
+        "type": "veilcast::pragma_resolver::PragmaResolver::PriceMarketOpened",
+        "kind": "nested"
+      },
+      {
+        "name": "PriceMarketSettled",
+        "type": "veilcast::pragma_resolver::PragmaResolver::PriceMarketSettled",
+        "kind": "nested"
+      }
+    ]
+  }
+]

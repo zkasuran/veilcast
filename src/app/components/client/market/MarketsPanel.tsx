@@ -6,6 +6,7 @@ import styles from "../../../uni.module.css";
 import type { MarketView } from "@/utils/market";
 import BetForm from "./BetForm";
 import CreateMarket from "./CreateMarket";
+import FeedSettle from "./FeedSettle";
 import MarketCard from "./MarketCard";
 import ResolverControls from "./ResolverControls";
 import { useBoard } from "./useBoard";
@@ -19,8 +20,18 @@ export default function MarketsPanel() {
 
     function isResolver(view: MarketView): boolean {
         if (!strk20.address || view.state !== "Open") return false;
+        return sameAddress(view.resolver, strk20.address);
+    }
+
+    /// A market whose resolver is the deployed Pragma adapter settles from a feed, so it gets the
+    /// feed panel instead of anybody's resolve button.
+    function isFeedBound(view: MarketView): boolean {
+        return strk20.hasResolver && sameAddress(view.resolver, strk20.resolverAddress);
+    }
+
+    function sameAddress(left: string, right: string): boolean {
         try {
-            return num.toBigInt(view.resolver) === num.toBigInt(strk20.address);
+            return num.toBigInt(left) === num.toBigInt(right);
         } catch {
             return false;
         }
@@ -92,6 +103,9 @@ export default function MarketsPanel() {
                         />
                     ) : null}
                     {isResolver(view) ? <ResolverControls view={view} onSettled={refresh} /> : null}
+                    {isFeedBound(view) && view.state === "Open" ? (
+                        <FeedSettle view={view} onSettled={refresh} />
+                    ) : null}
                 </MarketCard>
             ))}
         </div>

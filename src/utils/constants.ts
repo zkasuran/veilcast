@@ -41,6 +41,21 @@ export const Strk20Networks: Record<number, string> = { 0: "MAINNET", 2: "SEPOLI
 export const veilcastMarketMainnet = process.env.NEXT_PUBLIC_VEILCAST_MARKET_MAINNET ?? "0x0";
 export const veilcastMarketSepolia = process.env.NEXT_PUBLIC_VEILCAST_MARKET_SEPOLIA ?? "0x0";
 
+// ─── Pragma resolver ────────────────────────────────────────────────────────
+// Optional companion contract (cairo/src/pragma_resolver.cairo). Deployed, it lets a market be
+// bound to a price feed and settled by anyone from that feed. Absent, the app still works: every
+// market is then settled by whoever opened it.
+
+export const veilcastResolverMainnet = process.env.NEXT_PUBLIC_VEILCAST_RESOLVER_MAINNET ?? "0x0";
+export const veilcastResolverSepolia = process.env.NEXT_PUBLIC_VEILCAST_RESOLVER_SEPOLIA ?? "0x0";
+
+/// The Pragma resolver for a frontend provider index, or "0x0" where it is not deployed.
+export function resolverForIndex(index: number): string {
+    if (index === 0) return veilcastResolverMainnet;
+    if (index === 2) return veilcastResolverSepolia;
+    return "0x0";
+}
+
 /// The market contract for a frontend provider index (0 = Mainnet, 2 = Sepolia),
 /// or "0x0" where it is not deployed.
 export function marketForIndex(index: number): string {
