@@ -1,12 +1,24 @@
 # Classes and addresses
 
-Veilcast market (`VeilcastMarket`, `src/market.cairo`): not declared yet. Its class hash and its
-Sepolia and mainnet addresses land here as they are produced, and in `strk20.json` at the repo root.
+The market is bound to one pool and one token when it is constructed, and neither can be changed
+afterwards. A market on a different pool is a different deployment.
 
-The starter kit's echo helper came with the scaffold and is still what the frontend's Echo action
-calls. It is not part of the market:
+## VeilcastMarket (`src/market.cairo`)
+
+Not declared yet. Deploy with `scripts/deploy.sh <sepolia|mainnet>`, then record it here:
 
 ```
-contract class hash        : 0x2a4482a13cb7f70dce6f7ba99c4ee6ce404379abeddd9b831b6bf24eb71e137
-contract address (mainnet) : 0x78ae662e0cc6d1ab2cfeaf2a51ba8783d88e31886f88a794d142f95a6f8735b
+class hash                 :
+contract address (sepolia) :
+contract address (mainnet) :
 ```
+
+Constructor calldata is `(pool, token)`:
+
+```
+pool  (mainnet) : 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a
+token           : 0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d   (STRK)
+```
+
+A deployed address also belongs in `strk20.json` at the repo root, which is what the sprint hub
+reads, and in `.env.local` as `NEXT_PUBLIC_VEILCAST_MARKET_<NETWORK>` so the frontend can find it.

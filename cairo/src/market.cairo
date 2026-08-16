@@ -43,6 +43,7 @@ pub fn claim_message_hash(
 }
 #[starknet::contract]
 pub mod VeilcastMarket {
+    use core::cmp::min;
     use core::ecdsa::check_ecdsa_signature;
     use core::num::traits::{CheckedAdd, SaturatingAdd, Zero};
     use starknet::storage::{
@@ -51,7 +52,7 @@ pub mod VeilcastMarket {
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use veilcast::interface::{
         BetInput, ClaimInput, IErc20Dispatcher, IErc20DispatcherTrait, IVeilcastMarket, Market,
-        MarketAction, MarketState, OpenNoteDeposit, PayoutTarget, errors,
+        MarketAction, MarketState, MarketView, OpenNoteDeposit, PayoutTarget, errors,
     };
     use super::{MAX_OUTCOMES, VOID_GRACE, claim_message_hash};
 
@@ -223,6 +224,17 @@ pub mod VeilcastMarket {
             self.assert_market(market_id)
         }
 
+        fn get_market_views(self: @ContractState, start: u64, count: u64) -> Array<MarketView> {
+            let end = min(start.saturating_add(count), self.n_markets.read());
+            let mut views: Array<MarketView> = array![];
+            let mut market_id = start;
+            while market_id < end {
+                views.append(self.market_view(:market_id));
+                market_id += 1;
+            }
+            views
+        }
+
         fn get_question(self: @ContractState, market_id: u64) -> ByteArray {
             self.assert_market(market_id);
             self.questions.entry(market_id).read()
@@ -291,6 +303,26 @@ pub mod VeilcastMarket {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        /// Everything the board shows for one market that exists, read in a single pass.
+        fn market_view(self: @ContractState, market_id: u64) -> MarketView {
+            let market = self.markets.entry(market_id).read();
+            let mut outcome_labels: Array<ByteArray> = array![];
+            let mut outcome_volumes: Array<u128> = array![];
+            let mut outcome: u8 = 0;
+            while outcome < market.n_outcomes {
+                outcome_labels.append(self.outcome_labels.entry((market_id, outcome)).read());
+                outcome_volumes.append(self.outcome_volumes.entry((market_id, outcome)).read());
+                outcome += 1;
+            }
+            MarketView {
+                market_id,
+                market,
+                question: self.questions.entry(market_id).read(),
+                outcome_labels,
+                outcome_volumes,
+            }
+        }
+
         /// Credits a stake to `(market_id, outcome, position_key)` once the tokens are here.
         fn place_bet(ref self: ContractState, input: BetInput) -> Span<OpenNoteDeposit> {
             let BetInput { market_id, outcome, amount, position_key } = input;

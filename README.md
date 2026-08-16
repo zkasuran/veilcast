@@ -2,82 +2,180 @@
 
 Private prediction markets on Starknet. Visible odds, invisible bettors.
 
-> Built for the STRK20 Private Sprint. Runs against the live STRK20 privacy pool on Starknet.
+> Built for the STRK20 Private Sprint, against the live STRK20 privacy pool.
 
 ## What it is
 
-Veilcast is a prediction market where the crowd's information stays public and the crowd stays anonymous. Anyone can read the odds, the per-outcome volume and how the market is moving. Nobody can see who placed a given bet or link one bet to another. When a market resolves, winners collect privately.
+Veilcast is a prediction market where the crowd's information stays public while the crowd stays
+anonymous. Anyone can read the odds, the volume behind each outcome and how a market is moving.
+Nobody can see who placed a bet, tie two bets to one person or tie a payout back to the bet that
+earned it.
 
-A prediction market only works when the price signal is honest. That needs open volume so the odds mean something. It breaks when large players can be tracked, because visible whales cause herding and front-running, which scares off the flow that makes the price accurate. STRK20 lets Veilcast keep both halves: the amounts stay public so the odds are real, the identities stay private so the signal stays clean.
+A prediction market is only worth reading when its price signal is honest, and an honest signal
+needs open volume. It breaks the other way when large players can be tracked: visible whales cause
+herding and front-running, which drives off the flow that makes the price accurate in the first
+place. STRK20 lets Veilcast keep both halves. Amounts stay public so the odds are real, identities
+stay private so the flow stays honest.
 
-## Why it needs privacy and what is actually private
+## What is public and what is private
 
-STRK20 gives identity privacy, not amount privacy. Veilcast is designed around exactly that split. Being precise here matters for users and for judging. Overclaiming what is hidden is dishonest and it is the fastest way to get the privacy model wrong.
+STRK20 gives identity privacy, not amount privacy. Veilcast is built around exactly that split.
+Overclaiming here would be dishonest, and it is also the fastest way to design the thing wrong.
 
 | Public | Private |
 |---|---|
-| Each bet's amount and the outcome it backs | Who placed the bet (the on-chain sender is a shared relayer, never the bettor) |
-| Per-outcome volume and the live odds derived from it | The link between a bettor and their bets across markets |
-| The resolution and the oracle or resolver that produced it | The link between a winning position and the wallet that claims it |
-| A shield deposit: the depositor address, token and amount | A claim payout, routed as a private note-to-note transfer |
+| Each bet's amount and the outcome it backs | Who placed it. The market contract is never told an address |
+| Per-outcome volume and the odds that come off it | The link between one person and their bets, across markets and inside one |
+| Every market's question, resolver and settlement | The link between a winning position and the wallet that collects it |
+| A shield deposit: the depositor, the token, the amount | A payout, when it is collected into a private note |
 
-Amounts are deliberately public. That is not a limitation we are hiding, it is the design: a market with hidden sizes cannot produce accurate odds. What Veilcast removes is the identity layer, so flow drives price without letting anyone build a profile of who bets on what.
+Amounts are public on purpose. A market with hidden sizes cannot produce accurate odds, so hiding
+them would break the product to advertise a stronger privacy claim. What Veilcast removes is the
+identity layer.
 
-Shielding into the pool is a public, compliance-screened deposit. The privacy begins after that, once the balance is a private note. Veilcast never claims the deposit itself is hidden.
+Shielding into the pool is a public, screened deposit. The privacy starts after that, once the
+balance is a private note.
 
-## How it works
+## How a bet works
 
-Veilcast builds on the STRK20 privacy pool and the starter kit's `privacy_invoke` pattern.
+1. **Shield.** Deposit STRK into the pool once. Public, screened on-chain. You now hold a private
+   note.
+2. **Bet.** One pool transaction does two things in one atomic step: the pool withdraws your stake
+   into the market contract, then it invokes the market to book it. The sender recorded on-chain is
+   the pool's rotating relayer, so your address appears nowhere. The market is handed an amount, an
+   outcome and a public key it has never seen before.
+3. **Read the odds.** Per-outcome volume is public, so the implied probability and the payout
+   multiple are the same numbers for everyone looking.
+4. **Resolve.** The market's named resolver settles it after it closes, on-chain and in public.
+5. **Collect.** A winner signs their coupon and the payout lands in a fresh open note inside the
+   pool, which is a private note-to-note transfer. Collecting to a public address is offered too,
+   clearly labelled, because sometimes that is what you want.
 
-1. Shield. A user shields STRK into the pool once. This is a normal public deposit, screened on-chain. It credits the user a private note.
-2. Place a bet. To bet, the pool withdraws the stake into the Veilcast market contract inside one atomic `privacy_invoke` call. The contract records the stake against the chosen outcome and adds it to that outcome's public volume. The transaction is submitted by a rotating shared relayer, so the on-chain sender is the relayer and the bettor's address appears nowhere. The amount and the outcome are public. The bettor is not.
-3. Watch the odds. Odds are read straight off the public per-outcome volume, so the market stays informationally efficient. Everyone sees the same numbers.
-4. Resolve. Each market binds to a resolution source when it is created. Price questions resolve from a Pragma oracle feed. Non-price questions resolve from a named resolver or a vote. Resolution is on-chain and verifiable.
-5. Claim. A winner redeems their position and the payout leaves as a private note-to-note transfer, so the amount and the parties stay hidden and the payout cannot be linked back to the original bet.
+### The coupon is the position
 
-Auditability is preserved through STRK20 viewing keys. A user can disclose their own activity when they need to, which keeps the market usable where disclosure is required without making everything public by default.
+Nothing on-chain ties a position to an account, which means there is no account to look positions up
+by. When you bet, the browser generates a Stark keypair, sends the public half with the bet and keeps
+the private half in localStorage. Collecting means signing a message with that key.
 
-The market logic lives in a Cairo contract that implements the pool's `privacy_invoke` interface. The starter kit ships an echo helper with that shape; Veilcast replaces the echo body with real market accounting (outcomes, per-outcome volume, resolution and claims). The frontend is the starter kit's WalletAccountV6 flow, so every action goes through the user's wallet and the app never touches a viewing key.
+That is what makes the payout unlinkable: the coupon key is fresh per bet, so two bets by the same
+person share nothing on-chain, and the claim carries no address.
 
-## Stack
+It also means losing the coupon loses the payout, and anyone who holds a copy can collect. The
+Positions tab has a one-click backup for that reason. Treat the file as the money.
 
-- Cairo contract (Scarb, Starknet Foundry) implementing the STRK20 `privacy_invoke` interface.
-- Pragma oracle for price-based resolution.
-- Next.js 16, React 19, TypeScript, starknet.js 10, zustand. No component framework.
-- The live STRK20 pool on Starknet.
+A claim signature covers where the payout may go, so a relayer cannot redirect it. Signing for an
+address binds the payout to that address, and signing for an open note is a bearer authorization
+good only for the transaction carrying it, because the wallet picks the note id while it assembles
+the transaction.
 
-## Running locally (Sepolia)
+### Payouts are parimutuel
+
+There is no counterparty to match and no order book. Every stake goes into one pot, and when the
+market settles the whole pot is split across the winning side in proportion to stake. That is why
+the odds move as volume arrives, and why the app quotes what a stake would pay including itself:
+`stake * pot / winning_volume`, the same integer arithmetic the contract runs.
+
+Two edges are handled rather than left to chance. A market resolved on an outcome nobody backed
+voids instead of stranding the pot, so every stake becomes refundable. A resolver who goes silent
+cannot lock the pot either: 30 days past the close, anyone can void the market.
+
+### Resolution
+
+Each market names one resolver address when it is created, and only that address can settle it. The
+resolver is an address, not a person, so a contract can hold the role: an oracle adapter that reads
+a price feed and calls `resolve` settles a price question without the market itself knowing anything
+about feeds. Whoever opens a market is its resolver by default, which the app says out loud on the
+form.
+
+Resolution is deliberately public. The terms of a market are not the thing that needs hiding, and a
+settlement nobody can point at is not a settlement. What stays private is who was on each side.
+
+### The board is one call
+
+`get_market_views(start, count)` returns each market with its question, its labels and its live
+volumes in a single read, so a page load is two RPC calls whatever the board size rather than four
+per market plus one per outcome label.
+
+## What runs today
+
+| | |
+|---|---|
+| Cairo market contract | done, 16 tests green under Starknet Foundry |
+| App: board, bet, positions, private claim, pool actions | done, 29 tests green under vitest |
+| Declared and deployed | not yet, on either network |
+| Three mainnet pool transactions | not yet |
+
+Nothing is deployed yet, so both market addresses are still `0x0` and the board says so rather than
+pretending to have one. Deploying spends real STRK on mainnet, so it happens once the contract is
+final.
+
+## Repo layout
+
+```
+cairo/src/market.cairo               the market: bets, volumes, resolution, claims
+cairo/src/interface.cairo            the ABI, the calldata layout, the error codes
+cairo/src/tests/                     the contract's tests, including a mock of the pool
+cairo/scripts/deploy.sh              declare and deploy against a pool
+src/utils/veilcast.ts                coupons, claim signing, pool action lists, odds maths
+src/utils/market.ts                  board reads, payout maths, the public calls
+src/app/components/client/market/    board, bet form, positions, resolver controls
+src/app/components/client/strk20/    the pool actions and the shared submit path
+strk20.json                          what the sprint hub reads
+```
+
+## Running it
 
 ```bash
 npm install
-cp .env.example .env.local     # add a Starknet RPC key
+cp .env.example .env.local     # a Starknet RPC key, plus a market address once one is deployed
 npm run dev                    # http://localhost:3000
 ```
 
-Needs a privacy-enabled Starknet wallet (Ready) on Sepolia. During the sprint the app is developed against Sepolia, where the STRK20 discovery and proving endpoints are hosted, then pointed at mainnet.
+Needs a privacy-enabled Starknet wallet (Ready) on Mainnet or Sepolia. The app never touches a
+viewing key: proving and private state stay inside the wallet, which is the whole point of the STRK20
+wallet API.
 
-## Mainnet
+## Tests
 
-Verified values for the live STRK20 pool:
-
+```bash
+cd cairo && snforge test   # the market, its guards, the whole path from bet to claim
+npm test                   # signing, calldata, pool action lists, odds and payout maths
+npm run typecheck
+npm run build
 ```
-CHAIN_ID     = SN_MAIN
-RPC_URL      = https://rpc.starknet.lava.build
-POOL_ADDRESS = 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a
+
+The claim message hash is pinned on both sides of the wire.
+`test_claim_message_hash_matches_the_frontend` in Cairo and the matching vector in
+`src/utils/veilcast.test.ts` assert the same felt, so if either Poseidon implementation drifts a test
+fails instead of every claim reverting on-chain.
+
+## Deploying
+
+```bash
+sncast account import --name veilcast --address <account> --private-key <key> \
+    --type <oz|argent|braavos> --network sepolia
+cd cairo && VEILCAST_POOL=<pool address> ./scripts/deploy.sh sepolia
 ```
 
-The market contract address and the mainnet transaction hashes land in `strk20.json` as they are produced.
+The market is bound to one pool and one token at construction and neither can change afterwards, so
+that pair is the whole configuration. Record the address in `.env.local`, in `cairo/address.md` and
+in `strk20.json`.
 
 ## strk20.json
 
-The hub reads this file from the repo root. It carries the deployed contract addresses, the mainnet transaction hashes that prove the app runs against the pool, the demo video and the demo URL. Fields fill in as the build reaches mainnet.
-
-## Status
-
-Early build for the STRK20 Private Sprint. Developed on Sepolia first, then flipped to the live mainnet pool.
+The sprint hub reads this file from the repo root: the deployed contract addresses, the mainnet
+transaction hashes that prove the app ran against the pool, the demo video, the demo URL. Fields fill
+in as the build reaches mainnet.
 
 ## Credits and disclosure
 
-Bootstrapped from the STRK20 starter kit by Akashneelesh, itself based on [PhilippeR26/Starknet-WalletAccount](https://github.com/PhilippeR26/Starknet-WalletAccount). Built on [STRK20](https://strk20.starknet.io) by StarkWare.
+Bootstrapped from the STRK20 starter kit by Akashneelesh, itself based on
+[PhilippeR26/Starknet-WalletAccount](https://github.com/PhilippeR26/Starknet-WalletAccount). Built on
+[STRK20](https://strk20.starknet.io) by StarkWare.
 
-AI assistance (Claude) was used while building Veilcast. The design, the privacy model and the verification are owned by the author.
+AI assistance (Claude) was used while building Veilcast. The design, the privacy model and the
+verification are the author's.
+
+
+
+

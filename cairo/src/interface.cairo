@@ -104,6 +104,20 @@ pub struct Market {
     pub pot: u128,
 }
 
+/// A whole market in one read: its state, its question, its labels and its live volumes.
+///
+/// The board is what a visitor sees first, so it is worth one call rather than four per market plus
+/// one per outcome label. Serde only, never stored: the parts live in their own storage maps.
+#[derive(Drop, Serde, PartialEq, Debug)]
+pub struct MarketView {
+    pub market_id: u64,
+    pub market: Market,
+    pub question: ByteArray,
+    pub outcome_labels: Array<ByteArray>,
+    /// Staked per outcome, in outcome order, aligned with `outcome_labels`.
+    pub outcome_volumes: Array<u128>,
+}
+
 #[starknet::interface]
 pub trait IVeilcastMarket<TState> {
     /// Opens a market on `question` with one label per outcome. Returns its id.
@@ -129,6 +143,10 @@ pub trait IVeilcastMarket<TState> {
     fn privacy_invoke(ref self: TState, action: MarketAction) -> Span<OpenNoteDeposit>;
 
     fn get_market(self: @TState, market_id: u64) -> Market;
+    /// Up to `count` markets from id `start`, in id order, each with everything the board renders.
+    /// A range that runs past the last market is clipped instead of rejected, so a caller can page
+    /// without racing `get_n_markets`.
+    fn get_market_views(self: @TState, start: u64, count: u64) -> Array<MarketView>;
     fn get_question(self: @TState, market_id: u64) -> ByteArray;
     fn get_outcome_label(self: @TState, market_id: u64, outcome: u8) -> ByteArray;
     /// Staked amount per outcome, in outcome order. This is the public price signal.

@@ -17,8 +17,9 @@ const spaceMono = Space_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Shielded STRK · WalletAccountV6',
-  description: 'Shield, unshield and privately move STRK on Starknet with WalletAccountV6',
+  title: 'Veilcast · visible odds, invisible bettors',
+  description:
+    'A private prediction market on Starknet. Public volume so the odds mean something, anonymous bettors so they stay honest. Built on the STRK20 privacy pool.',
 }
 
 export default function RootLayout({

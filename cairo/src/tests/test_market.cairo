@@ -464,6 +464,56 @@ fn test_anyone_can_void_a_market_left_open_past_the_grace_period() {
     assert_eq!(veilcast.market.get_market(market_id).state, MarketState::Void);
 }
 
+/// The board is one call: every market in the range with its question, its labels and its live
+/// volumes. A range past the last market is clipped, so paging never has to race `get_n_markets`.
+#[test]
+fn test_market_views_render_the_whole_board() {
+    let veilcast = deploy_veilcast();
+    let resolver = resolver_address();
+    let market_id = veilcast.create_binary_market(:resolver, close_at: CLOSE_AT);
+    veilcast.create_binary_market(:resolver, close_at: CLOSE_AT);
+    veilcast.bet(:market_id, outcome: 1, amount: 2 * ONE_STRK, position_key: new_coupon().public_key);
+
+    let views = veilcast.market.get_market_views(0, 8);
+
+    assert_eq!(views.len(), 2);
+    let view = views.at(0);
+    assert_eq!(*view.market_id, market_id);
+    assert_eq!(view.question, @"Will STRK close above 1 USD?");
+    assert_eq!(view.outcome_labels, @array!["Yes", "No"]);
+    assert_eq!(view.outcome_volumes, @array![0, 2 * ONE_STRK]);
+    assert_eq!(view.market.pot, @(2 * ONE_STRK));
+    assert_eq!(view.market.state, @MarketState::Open);
+    assert_eq!(view.market.resolver, @resolver);
+    assert_eq!(*views.at(1).market_id, 1);
+
+    // A window inside the board, and one that runs off the end.
+    let window = veilcast.market.get_market_views(1, 1);
+    assert_eq!(window.len(), 1);
+    assert_eq!(*window.at(0).market_id, 1);
+    assert_eq!(veilcast.market.get_market_views(1, 99).len(), 1);
+    // Nothing past the last market, and no panic for asking.
+    assert_eq!(veilcast.market.get_market_views(2, 5).len(), 0);
+    assert_eq!(veilcast.market.get_market_views(0, 0).len(), 0);
+}
+
+/// The frontend signs claims with its own Poseidon implementation, so the two have to agree felt
+/// for felt. This is the fixed vector `src/utils/veilcast.test.ts` checks on the TypeScript side:
+/// if either implementation drifts, one of the two tests fails.
+#[test]
+fn test_claim_message_hash_matches_the_frontend() {
+    assert_eq!(
+        claim_message_hash(
+            market_address: 'MARKET'.try_into().unwrap(),
+            market_id: 7,
+            outcome: 1,
+            position_key: 'COUPON',
+            target: 0,
+        ),
+        0x421e0ee22d66877400410f3d00e57cae3b41f27c631bb8315168ac53a23ddf6,
+    );
+}
+
 /// The live quote is what the UI shows as odds: what a fresh stake would collect if its outcome
 /// won, counting itself in both the pot and the winning side.
 #[test]

@@ -465,3 +465,264 @@
 @media (prefers-reduced-motion: reduce) {
   .btn, .connectPill, .btnCta, .tab { transition: none; }
 }
+
+/* --- Veilcast: the board, the bet, the positions ------------------------- */
+
+/* The board needs more room than a single action does. */
+.panelWide { width: min(760px, calc(100vw - 32px)); margin: 0 auto; }
+
+.brandBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  padding: 4px 9px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.brandBadge .brandImg { height: 14px; }
+
+/* Big amount field, sized like the static value it replaces. */
+.bigInput {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  padding: 0;
+  outline: none;
+}
+.bigInput::placeholder { color: #c9c9d2; }
+
+.textInput {
+  width: 100%;
+  margin-top: 8px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+  font-size: 14px;
+  outline: none;
+}
+.textInput:focus { border-color: var(--pink-soft-2); }
+.textInput::placeholder { color: var(--muted); }
+.hiddenInput { display: none; }
+
+.notice {
+  padding: 15px 17px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--inset);
+  color: #3b3b46;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.notice code {
+  font-family: var(--font-mono-ui), monospace;
+  font-size: 12.5px;
+  color: var(--pink-text);
+}
+
+.boardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.boardCount {
+  flex: 1;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.boardHead .btn { background: var(--inset); color: #3b3b46; }
+.boardHead .btn:not(:disabled):hover { background: var(--inset-2); }
+
+.newMarketToggle {
+  font-family: var(--font-body), sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--pink-text);
+  background: var(--pink-soft);
+  border: none;
+  border-radius: 999px;
+  padding: 11px 18px;
+  cursor: pointer;
+}
+.newMarketToggle:hover { background: var(--pink-soft-2); }
+.marketCard {
+  margin-bottom: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: 0 12px 30px -26px rgba(13, 14, 14, 0.45);
+}
+.marketHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.marketQuestion {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+.marketFoot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.marketLink { color: var(--pink-text); font-weight: 500; text-decoration: none; }
+.marketLink:hover { text-decoration: underline; }
+
+.pill {
+  flex: none;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pillPink { color: var(--pink-text); background: var(--pink-soft); }
+.pillGreen { color: var(--green); background: var(--green-soft); }
+.pillGrey { color: var(--muted); background: var(--inset); }
+.outcomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body), sans-serif;
+  transition: border-color 140ms, background 140ms;
+}
+.outcome:not(:disabled):hover { border-color: var(--pink-soft-2); background: var(--pink-soft); }
+.outcome:disabled { cursor: default; }
+.outcomeSelected { border-color: var(--pink); background: var(--pink-soft); }
+.outcomeWon { border-color: #bfe9d5; background: var(--green-soft); }
+.outcomeLost { opacity: 0.55; }
+.outcomeTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.outcomeLabel { font-size: 15px; font-weight: 600; color: var(--ink); }
+.outcomePercent {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--pink-text);
+  font-variant-numeric: tabular-nums;
+}
+.outcomeWon .outcomePercent { color: var(--green); }
+.outcomeBar { height: 5px; border-radius: 999px; background: var(--inset-2); overflow: hidden; }
+.outcomeFill { display: block; height: 100%; border-radius: 999px; background: var(--pink); }
+.outcomeWon .outcomeFill { background: var(--green); }
+.outcomeFoot { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.betForm { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+/* What this bet publishes, next to what it does not. */
+.splitNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.splitPublic { padding: 5px 11px; border-radius: 999px; color: #3b3b46; background: var(--inset); }
+.splitPrivate { padding: 5px 11px; border-radius: 999px; color: var(--green); background: var(--green-soft); }
+
+.resolverBox {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  background: var(--inset);
+}
+.resolverHead { font-size: 13.5px; font-weight: 600; margin-bottom: 10px; }
+.resolverRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.resolverLabel { flex: 1; color: var(--muted); font-size: 12.5px; }
+.resolverRow .btn { background: #fff; border: 1px solid var(--line); color: #3b3b46; }
+.resolverRow .btnGreen { border-color: #cdeede; color: var(--green); background: var(--green-soft); }
+.resolverNote { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.createBox {
+  margin-bottom: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--card);
+  flex: 1 0 100%;
+}
+.createHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 600;
+}
+.createNote { margin-top: 10px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+.positionRow {
+  margin-bottom: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+}
+.positionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.positionQuestion { font-size: 15px; font-weight: 600; line-height: 1.4; }
+.positionFacts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.positionFacts b { color: var(--ink); font-weight: 600; }
+.positionPayout { color: var(--green); font-weight: 600; }
+.positionActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.positionActions .btn { background: var(--inset); color: #3b3b46; }
+.positionNote { margin-top: 10px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }

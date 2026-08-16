@@ -1,0 +1,636 @@
+[
+  {
+    "type": "impl",
+    "name": "VeilcastMarketImpl",
+    "interface_name": "veilcast::interface::IVeilcastMarket"
+  },
+  {
+    "type": "struct",
+    "name": "core::byte_array::ByteArray",
+    "members": [
+      {
+        "name": "data",
+        "type": "core::array::Array::<core::bytes_31::bytes31>"
+      },
+      {
+        "name": "pending_word",
+        "type": "core::felt252"
+      },
+      {
+        "name": "pending_word_len",
+        "type": "core::internal::bounded_int::BoundedInt::<0, 30>"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "veilcast::interface::BetInput",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64"
+      },
+      {
+        "name": "outcome",
+        "type": "core::integer::u8"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128"
+      },
+      {
+        "name": "position_key",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
+    "type": "enum",
+    "name": "veilcast::interface::PayoutTarget",
+    "variants": [
+      {
+        "name": "OpenNote",
+        "type": "core::felt252"
+      },
+      {
+        "name": "Address",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "veilcast::interface::ClaimInput",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64"
+      },
+      {
+        "name": "outcome",
+        "type": "core::integer::u8"
+      },
+      {
+        "name": "position_key",
+        "type": "core::felt252"
+      },
+      {
+        "name": "signature_r",
+        "type": "core::felt252"
+      },
+      {
+        "name": "signature_s",
+        "type": "core::felt252"
+      },
+      {
+        "name": "target",
+        "type": "veilcast::interface::PayoutTarget"
+      }
+    ]
+  },
+  {
+    "type": "enum",
+    "name": "veilcast::interface::MarketAction",
+    "variants": [
+      {
+        "name": "Bet",
+        "type": "veilcast::interface::BetInput"
+      },
+      {
+        "name": "Claim",
+        "type": "veilcast::interface::ClaimInput"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "veilcast::interface::OpenNoteDeposit",
+    "members": [
+      {
+        "name": "note_id",
+        "type": "core::felt252"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "core::array::Span::<veilcast::interface::OpenNoteDeposit>",
+    "members": [
+      {
+        "name": "snapshot",
+        "type": "@core::array::Array::<veilcast::interface::OpenNoteDeposit>"
+      }
+    ]
+  },
+  {
+    "type": "enum",
+    "name": "veilcast::interface::MarketState",
+    "variants": [
+      {
+        "name": "Open",
+        "type": "()"
+      },
+      {
+        "name": "Resolved",
+        "type": "()"
+      },
+      {
+        "name": "Void",
+        "type": "()"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "veilcast::interface::Market",
+    "members": [
+      {
+        "name": "resolver",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "close_at",
+        "type": "core::integer::u64"
+      },
+      {
+        "name": "n_outcomes",
+        "type": "core::integer::u8"
+      },
+      {
+        "name": "state",
+        "type": "veilcast::interface::MarketState"
+      },
+      {
+        "name": "winning_outcome",
+        "type": "core::integer::u8"
+      },
+      {
+        "name": "pot",
+        "type": "core::integer::u128"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "veilcast::interface::MarketView",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64"
+      },
+      {
+        "name": "market",
+        "type": "veilcast::interface::Market"
+      },
+      {
+        "name": "question",
+        "type": "core::byte_array::ByteArray"
+      },
+      {
+        "name": "outcome_labels",
+        "type": "core::array::Array::<core::byte_array::ByteArray>"
+      },
+      {
+        "name": "outcome_volumes",
+        "type": "core::array::Array::<core::integer::u128>"
+      }
+    ]
+  },
+  {
+    "type": "struct",
+    "name": "core::array::Span::<core::integer::u128>",
+    "members": [
+      {
+        "name": "snapshot",
+        "type": "@core::array::Array::<core::integer::u128>"
+      }
+    ]
+  },
+  {
+    "type": "interface",
+    "name": "veilcast::interface::IVeilcastMarket",
+    "items": [
+      {
+        "type": "function",
+        "name": "create_market",
+        "inputs": [
+          {
+            "name": "question",
+            "type": "core::byte_array::ByteArray"
+          },
+          {
+            "name": "outcome_labels",
+            "type": "core::array::Array::<core::byte_array::ByteArray>"
+          },
+          {
+            "name": "resolver",
+            "type": "core::starknet::contract_address::ContractAddress"
+          },
+          {
+            "name": "close_at",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::integer::u64"
+          }
+        ],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "resolve",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          },
+          {
+            "name": "winning_outcome",
+            "type": "core::integer::u8"
+          }
+        ],
+        "outputs": [],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "void",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "privacy_invoke",
+        "inputs": [
+          {
+            "name": "action",
+            "type": "veilcast::interface::MarketAction"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::array::Span::<veilcast::interface::OpenNoteDeposit>"
+          }
+        ],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "get_market",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "veilcast::interface::Market"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_market_views",
+        "inputs": [
+          {
+            "name": "start",
+            "type": "core::integer::u64"
+          },
+          {
+            "name": "count",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::array::Array::<veilcast::interface::MarketView>"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_question",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::byte_array::ByteArray"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_outcome_label",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          },
+          {
+            "name": "outcome",
+            "type": "core::integer::u8"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::byte_array::ByteArray"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_outcome_volumes",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::array::Span::<core::integer::u128>"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_stake",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          },
+          {
+            "name": "outcome",
+            "type": "core::integer::u8"
+          },
+          {
+            "name": "position_key",
+            "type": "core::felt252"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::integer::u128"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "quote_payout",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          },
+          {
+            "name": "outcome",
+            "type": "core::integer::u8"
+          },
+          {
+            "name": "stake",
+            "type": "core::integer::u128"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "core::integer::u128"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_n_markets",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::integer::u64"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_pool",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_token",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::starknet::contract_address::ContractAddress"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_total_escrow",
+        "inputs": [],
+        "outputs": [
+          {
+            "type": "core::integer::u128"
+          }
+        ],
+        "state_mutability": "view"
+      }
+    ]
+  },
+  {
+    "type": "constructor",
+    "name": "constructor",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "token",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::market::VeilcastMarket::MarketCreated",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      },
+      {
+        "name": "resolver",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "data"
+      },
+      {
+        "name": "close_at",
+        "type": "core::integer::u64",
+        "kind": "data"
+      },
+      {
+        "name": "n_outcomes",
+        "type": "core::integer::u8",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::market::VeilcastMarket::BetPlaced",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      },
+      {
+        "name": "outcome",
+        "type": "core::integer::u8",
+        "kind": "key"
+      },
+      {
+        "name": "position_key",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128",
+        "kind": "data"
+      },
+      {
+        "name": "outcome_volume",
+        "type": "core::integer::u128",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::market::VeilcastMarket::MarketResolved",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      },
+      {
+        "name": "winning_outcome",
+        "type": "core::integer::u8",
+        "kind": "data"
+      },
+      {
+        "name": "pot",
+        "type": "core::integer::u128",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::market::VeilcastMarket::MarketVoided",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::market::VeilcastMarket::PayoutClaimed",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      },
+      {
+        "name": "position_key",
+        "type": "core::felt252",
+        "kind": "key"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "veilcast::market::VeilcastMarket::Event",
+    "kind": "enum",
+    "variants": [
+      {
+        "name": "MarketCreated",
+        "type": "veilcast::market::VeilcastMarket::MarketCreated",
+        "kind": "nested"
+      },
+      {
+        "name": "BetPlaced",
+        "type": "veilcast::market::VeilcastMarket::BetPlaced",
+        "kind": "nested"
+      },
+      {
+        "name": "MarketResolved",
+        "type": "veilcast::market::VeilcastMarket::MarketResolved",
+        "kind": "nested"
+      },
+      {
+        "name": "MarketVoided",
+        "type": "veilcast::market::VeilcastMarket::MarketVoided",
+        "kind": "nested"
+      },
+      {
+        "name": "PayoutClaimed",
+        "type": "veilcast::market::VeilcastMarket::PayoutClaimed",
+        "kind": "nested"
+      }
+    ]
+  }
+]
