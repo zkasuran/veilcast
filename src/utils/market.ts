@@ -117,8 +117,9 @@ export function positionStatus(
 }
 
 /// Decodes one entry of `get_market_views`. starknet.js hands back bigints, a decoded string per
-/// `ByteArray` and a `CairoCustomEnum` for the state.
-function decodeMarketView(raw: unknown): MarketView {
+/// `ByteArray` and a `CairoCustomEnum` for the state. Exported so a test can drive it with the exact
+/// felts the contract puts on the wire.
+export function decodeMarketView(raw: unknown): MarketView {
     const view = raw as {
         market_id: bigint;
         market: {

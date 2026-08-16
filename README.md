@@ -117,7 +117,7 @@ per market plus one per outcome label.
 |---|---|
 | Cairo market contract | done, 24 tests green under Starknet Foundry |
 | Pragma resolver contract | done, covered by those tests against a mock feed |
-| App: board, bet, positions, private claim, feed settlement, pool actions | done, 36 tests green under vitest |
+| App: board, bet, positions, private claim, feed settlement, pool actions | done, 38 tests green under vitest |
 | Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
 | Declared and deployed | not yet, on either network |
 | Three mainnet pool transactions | not yet |

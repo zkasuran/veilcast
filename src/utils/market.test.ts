@@ -1,9 +1,11 @@
-import { CairoCustomEnum } from "starknet";
+import { CairoCustomEnum, CallData, num, shortString } from "starknet";
 import { describe, expect, it } from "vitest";
+import marketAbi from "@/abi/veilcastMarket.json";
 import {
     type MarketView,
     createMarketCall,
     decodeMarketState,
+    decodeMarketView,
     positionStatus,
     resolveCall,
     settledPayout,
@@ -95,6 +97,55 @@ describe("positionStatus", () => {
     it("tells a collected position from one the chain never saw", () => {
         expect(positionStatus(view, 0, 0n, true)).toBe("collected");
         expect(positionStatus(view, 0, 0n, false)).toBe("empty");
+    });
+});
+
+describe("decodeMarketView", () => {
+    /// The board is decoded from felts, so this drives the real ABI parser with the exact response
+    /// `get_market_views` puts on the wire: one view, a two-outcome resolved market. If the struct's
+    /// field order, the ByteArray layout or the enum encoding ever moves, this fails here rather than
+    /// showing a visitor an empty board.
+    const response = [
+        "0x1", // one view in the returned array
+        "0x0", // market_id
+        "0x123", // market.resolver
+        "0x3e8", // market.close_at
+        "0x2", // market.n_outcomes
+        "0x1", // market.state, variant index 1 = Resolved
+        "0x0", // market.winning_outcome
+        num.toHex(6n * ONE_STRK), // market.pot
+        // question, as a ByteArray: no full 31-byte words, one pending word, its length
+        "0x0", shortString.encodeShortString("Will STRK win?"), "0xe",
+        "0x2", // two labels, each its own ByteArray
+        "0x0", shortString.encodeShortString("Yes"), "0x3",
+        "0x0", shortString.encodeShortString("No"), "0x2",
+        "0x2", // two volumes
+        num.toHex(4n * ONE_STRK), num.toHex(2n * ONE_STRK),
+    ];
+
+    it("reads a board response felt for felt", () => {
+        const parsed = new CallData(marketAbi).parse("get_market_views", response) as unknown[];
+
+        expect(parsed).toHaveLength(1);
+        expect(decodeMarketView(parsed[0])).toEqual({
+            id: 0,
+            question: "Will STRK win?",
+            labels: ["Yes", "No"],
+            volumes: [4n * ONE_STRK, 2n * ONE_STRK],
+            pot: 6n * ONE_STRK,
+            closeAt: 1000,
+            state: "Resolved",
+            winningOutcome: 0,
+            resolver: "0x0000000000000000000000000000000000000000000000000000000000000123",
+        });
+    });
+
+    it("pairs each label with the volume that belongs to it", () => {
+        const parsed = new CallData(marketAbi).parse("get_market_views", response) as unknown[];
+        const view = decodeMarketView(parsed[0]);
+
+        expect(view.labels[view.winningOutcome]).toBe("Yes");
+        expect(settledPayout(view, 0, 4n * ONE_STRK)).toBe(6n * ONE_STRK);
     });
 });
 
