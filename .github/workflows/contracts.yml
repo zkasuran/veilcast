@@ -1,0 +1,28 @@
+name: contracts
+
+# The market's own tests, on the toolchain pinned in cairo/.tool-versions.
+on:
+  push:
+    branches: [main]
+    paths: ["cairo/**", ".github/workflows/contracts.yml"]
+  pull_request:
+    paths: ["cairo/**", ".github/workflows/contracts.yml"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cairo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: 2.20.0
+      - uses: foundry-rs/setup-snfoundry@v4
+        with:
+          starknet-foundry-version: 0.63.0
+      - run: scarb fmt --check
+      - run: scarb build
+      - run: snforge test

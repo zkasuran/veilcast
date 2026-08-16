@@ -472,7 +472,8 @@ fn test_market_views_render_the_whole_board() {
     let resolver = resolver_address();
     let market_id = veilcast.create_binary_market(:resolver, close_at: CLOSE_AT);
     veilcast.create_binary_market(:resolver, close_at: CLOSE_AT);
-    veilcast.bet(:market_id, outcome: 1, amount: 2 * ONE_STRK, position_key: new_coupon().public_key);
+    veilcast
+        .bet(:market_id, outcome: 1, amount: 2 * ONE_STRK, position_key: new_coupon().public_key);
 
     let views = veilcast.market.get_market_views(0, 8);
 

@@ -8,13 +8,27 @@ export const addrSTRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab0720185
 
 // ─── Networks ───────────────────────────────────────────────────────────────
 
-// Frontend RPC providers, indexed. The STRK20 privacy pool lives on Mainnet (0)
-// and Sepolia (2); index 1 is a spare public testnet endpoint. NEXT_PUBLIC_PROVIDER_URL
-// is your Alchemy key (see .env.example).
+// An Alchemy key is optional. Given one the app uses it, and without one it falls back to a keyless
+// public endpoint, so a fresh clone and the hosted demo both work with no configuration. Every URL
+// here was checked against the live network: Alchemy serves RPC spec 0.10, Cartridge serves 0.10.2
+// on Mainnet and 0.9.0 on Sepolia. The starter kit's blastapi endpoints are gone, Blast shut its
+// public API down and now answers every call with an error.
+const alchemyKey = process.env.NEXT_PUBLIC_PROVIDER_URL;
+
+function nodeUrl(network: "mainnet" | "sepolia"): string {
+    return alchemyKey
+        ? `https://starknet-${network}.g.alchemy.com/starknet/version/rpc/v0_10/${alchemyKey}`
+        : `https://api.cartridge.gg/x/starknet/${network}`;
+}
+
+// Frontend RPC providers, indexed. The index is wiring, not a list: 0 is Mainnet, 2 is Sepolia, and
+// the wallet flow maps a chain id onto one of those two. Index 1 is a spare Sepolia endpoint that
+// never depends on the key, which is what to switch to when a key is rate-limited or wrong.
 export const myFrontendProviders: ProviderInterface[] = [
-    new RpcProvider({ nodeUrl: "https://starknet-mainnet.g.alchemy.com/starknet/version/rpc/v0_10/" + process.env.NEXT_PUBLIC_PROVIDER_URL }),
-    new RpcProvider({ nodeUrl: "https://starknet-testnet.public.blastapi.io/rpc/v0_7" }),
-    new RpcProvider({ nodeUrl: "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/" + process.env.NEXT_PUBLIC_PROVIDER_URL })];
+    new RpcProvider({ nodeUrl: nodeUrl("mainnet") }),
+    new RpcProvider({ nodeUrl: "https://api.cartridge.gg/x/starknet/sepolia" }),
+    new RpcProvider({ nodeUrl: nodeUrl("sepolia") }),
+];
 
 // Frontend provider indices where the STRK20 privacy pool is available, mapped to a
 // display name. Used to gate every pool action.

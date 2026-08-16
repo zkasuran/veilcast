@@ -32,6 +32,9 @@ const BG_TOKENS: BgToken[] = [
   { Coin: ZecCoin, pos: { top: '88%', right: '20%' }, size: 100, blur: 5, opacity: 0.48 },
 ];
 
+// Files in public/ are not rewritten by basePath, so a project page has to prefix them by hand.
+const ASSETS = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 // Two market tabs, then the pool actions a bet is built on.
 type TabKey = "markets" | "positions" | PoolAction;
 const TABS: { key: TabKey; label: string }[] = [
@@ -66,7 +69,7 @@ export default function Page() {
           <span className={styles.brandBadge}>
             on
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/tokens/strk20.png" alt="STRK20" className={styles.brandImg} />
+            <img src={`${ASSETS}/tokens/strk20.png`} alt="STRK20" className={styles.brandImg} />
           </span>
         </div>
         <SelectWallet variant="nav" />

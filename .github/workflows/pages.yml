@@ -1,0 +1,55 @@
+name: demo
+
+# Publishes the static export to GitHub Pages on every push to main, so the demo a judge opens is
+# always the code in the repository. Nothing here needs a secret: the app talks to a public RPC
+# endpoint and the market addresses are public on-chain anyway.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, newest wins.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          # A project page is served under the repository name.
+          NEXT_PUBLIC_BASE_PATH: /veilcast
+          # Set these with `gh variable set` once the market is deployed. Unset means the app says
+          # so on the board instead of failing.
+          NEXT_PUBLIC_VEILCAST_MARKET_MAINNET: ${{ vars.VEILCAST_MARKET_MAINNET }}
+          NEXT_PUBLIC_VEILCAST_MARKET_SEPOLIA: ${{ vars.VEILCAST_MARKET_SEPOLIA }}
+      # Pages would otherwise hide _next/ from Jekyll.
+      - run: touch out/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
