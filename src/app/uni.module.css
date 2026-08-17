@@ -874,3 +874,110 @@
 .factLink:hover { text-decoration: underline; }
 .notice a { color: var(--pink-text); font-weight: 600; text-decoration: none; }
 .notice a:hover { text-decoration: underline; }
+
+/* --- The odds chart ------------------------------------------------------
+   Categorical slots in the fixed order that clears the colour-vision gates on
+   this white surface (validated: worst adjacent CVD dE 9.1, normal-vision 19.6).
+   Three of them sit under 3:1 against white, so every line also carries a direct
+   label and the whole series is available as a table. Never reorder these. */
+.chart {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+
+  position: relative;
+  padding: 6px 4px 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+}
+.chartSvg { display: block; width: 100%; height: auto; }
+.chartGrid { stroke: #e1e0d9; stroke-width: 1; }
+.chartTick {
+  fill: #898781;
+  font-family: var(--font-body), sans-serif;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.chartCrosshair { stroke: #c3c2b7; stroke-width: 1; stroke-dasharray: 3 3; }
+.chartLine { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chartDot { stroke: var(--card); stroke-width: 2; }
+.chartLabel {
+  fill: #52514e;
+  font-family: var(--font-body), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+}
+.chartTip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--inset);
+  font-size: 12px;
+}
+.chartTipHead { color: #52514e; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chartTipRow { display: flex; align-items: center; gap: 7px; color: #52514e; }
+.chartTipRow b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.chartTipVolume { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chartSwatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+
+.chartTable { margin: 0 8px 10px; font-size: 12px; color: var(--muted); }
+.chartTable summary { cursor: pointer; font-weight: 550; }
+.chartTable table { width: 100%; margin-top: 8px; border-collapse: collapse; }
+.chartTable th, .chartTable td {
+  padding: 5px 8px;
+  border-top: 1px solid var(--line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.chartTable th:first-child, .chartTable td:first-child { text-align: left; }
+.chartTable th { color: #52514e; font-weight: 600; }
+/* --- The activity feed --------------------------------------------------- */
+.feedList {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+  padding: 4px 16px;
+}
+.feedItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+}
+.feedItem:first-child { border-top: none; }
+.feedKind {
+  flex: none;
+  width: 74px;
+  padding: 3px 0;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.feedKindPink { color: var(--pink-text); background: var(--pink-soft); }
+.feedKindGreen { color: var(--green); background: var(--green-soft); }
+.feedKindGrey { color: var(--muted); background: var(--inset); }
+.feedText { flex: 1; color: #3b3b46; }
+.feedLink {
+  flex: none;
+  color: var(--pink-text);
+  font-family: var(--font-mono-ui), monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.feedLink:hover { text-decoration: underline; }

@@ -9,11 +9,14 @@ import { voyagerContractUrl } from "@/utils/constants";
 import { categoryLabel, marketStatus } from "@/utils/discovery";
 import { formatStrk } from "@/utils/veilcast";
 import BetForm from "./BetForm";
+import ActivityFeed from "./ActivityFeed";
 import FeedSettle from "./FeedSettle";
 import MarketCard from "./MarketCard";
+import OddsChart from "./OddsChart";
 import PositionRow from "./PositionRow";
 import ResolverControls from "./ResolverControls";
 import { useBoard } from "./useBoard";
+import { useMarketHistory } from "./useMarketHistory";
 import { usePositions } from "./usePositions";
 import { shortHex, useStrk20 } from "../strk20/useStrk20";
 
@@ -34,6 +37,7 @@ export default function MarketDetail() {
     const [copied, setCopied] = useState(false);
 
     const view = markets.find((market) => market.id === id);
+    const history = useMarketHistory(id, view?.labels.length ?? 0);
 
     function isResolver(): boolean {
         if (!view || !strk20.address || view.state !== "Open") return false;
@@ -115,6 +119,7 @@ export default function MarketDetail() {
                         onPlaced={() => {
                             setOutcome(undefined);
                             void refresh();
+                            void history.reload();
                             positions.reload();
                         }}
                     />
@@ -124,6 +129,15 @@ export default function MarketDetail() {
                     <FeedSettle view={view} onSettled={refresh} />
                 ) : null}
             </MarketCard>
+
+            <div className={styles.detailSection}>
+                <h2 className={styles.detailHead}>How the odds moved</h2>
+                {history.error ? (
+                    <div className={styles.warn}>Could not read the market's events: {history.error}</div>
+                ) : (
+                    <OddsChart points={history.points} labels={view.labels} />
+                )}
+            </div>
 
             <div className={styles.detailSection}>
                 <h2 className={styles.detailHead}>Your positions here</h2>
@@ -147,6 +161,17 @@ export default function MarketDetail() {
                     ))
                 )}
                 {positions.error ? <div className={styles.warn}>{positions.error}</div> : null}
+            </div>
+
+            <div className={styles.detailSection}>
+                <h2 className={styles.detailHead}>Activity</h2>
+                <ActivityFeed
+                    events={history.events}
+                    labels={view.labels}
+                    providerIndex={strk20.providerIndex}
+                    loading={history.loading}
+                    error={history.error}
+                />
             </div>
 
             <div className={styles.detailSection}>

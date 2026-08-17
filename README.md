@@ -111,13 +111,30 @@ settlement nobody can point at is not a settlement. What stays private is who wa
 volumes in a single read, so a page load is two RPC calls whatever the board size rather than four
 per market plus one per outcome label.
 
+A market also carries its section and its opening time on-chain, so the board can search, filter by
+section or by what a market is doing, and sort by closing soonest, most volume or newest without an
+indexer behind it.
+
+### Every market has a page
+
+`/market/?id=N` is a market on its own: the odds, the bet form, whoever can settle it, your own
+coupons for it, then the on-chain facts with links to the contract. The id is a query parameter
+rather than a path because the app is a static export, and a path per market would mean prerendering
+every market that will ever exist.
+
+That page also draws the market's history. Each `BetPlaced` event carries that outcome's running
+total, so the chart is the market's real past rather than a reconstruction: one filtered event query
+per market, no indexer, no interpolation. The activity list underneath is the same events in words,
+and it is worth reading as the anonymity set, because every row is an amount and a coupon key with no
+address anywhere in it.
+
 ## What runs today
 
 | | |
 |---|---|
 | Cairo market contract | done, 24 tests green under Starknet Foundry |
 | Pragma resolver contract | done, covered by those tests against a mock feed |
-| App: board, bet, positions, private claim, feed settlement, pool actions | done, 38 tests green under vitest |
+| App: board, bet, positions, private claim, feed settlement, pool actions | done, 63 tests green under vitest |
 | Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
 | Declared and deployed | not yet, on either network |
 | Three mainnet pool transactions | not yet |
@@ -138,7 +155,9 @@ cairo/scripts/deploy.sh              declare and deploy against a pool
 src/utils/veilcast.ts                coupons, claim signing, pool action lists, odds maths
 src/utils/market.ts                  board reads, payout maths, the public calls
 src/utils/resolver.ts                price questions, feed reads, settlement calls
-src/app/components/client/market/    board, bet form, positions, resolver and feed controls
+src/utils/discovery.ts               sections, search, status, sorting
+src/utils/events.ts                  a market's history, read from its own events
+src/app/components/client/market/    board, market page, bet form, chart, activity, positions
 src/app/components/client/strk20/    the pool actions and the shared submit path
 strk20.json                          what the sprint hub reads
 ```
