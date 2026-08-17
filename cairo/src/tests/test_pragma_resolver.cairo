@@ -62,6 +62,7 @@ impl PriceMarketImpl of PriceMarketTrait {
                 label_at_or_above: "Yes",
                 label_below: "No",
                 close_at: CLOSE_AT,
+                category: 'Crypto',
                 pair_id: STRK_USD,
                 threshold: ONE_DOLLAR,
             )
@@ -247,6 +248,7 @@ fn test_open_price_market_rejects_a_question_with_no_feed_behind_it() {
                 label_at_or_above: "Yes",
                 label_below: "No",
                 close_at: CLOSE_AT,
+                category: 'Crypto',
                 pair_id: 0,
                 threshold: ONE_DOLLAR,
             ),
@@ -259,6 +261,7 @@ fn test_open_price_market_rejects_a_question_with_no_feed_behind_it() {
                 label_at_or_above: "Yes",
                 label_below: "No",
                 close_at: CLOSE_AT,
+                category: 'Crypto',
                 pair_id: STRK_USD,
                 threshold: 0,
             ),

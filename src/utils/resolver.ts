@@ -2,6 +2,7 @@
 
 import { Contract, num, shortString, type Abi, type Call, type ProviderInterface } from "starknet";
 import resolverAbi from "@/abi/pragmaResolver.json";
+import { encodeCategory } from "./discovery";
 
 const ABI = resolverAbi as Abi;
 
@@ -40,6 +41,7 @@ export function openPriceMarketCall(
     labelAtOrAbove: string,
     labelBelow: string,
     closeAt: number,
+    category: string,
     ticker: string,
     threshold: bigint
 ): Call {
@@ -48,6 +50,7 @@ export function openPriceMarketCall(
         labelAtOrAbove,
         labelBelow,
         closeAt,
+        encodeCategory(category),
         shortString.encodeShortString(ticker),
         threshold,
     ]);

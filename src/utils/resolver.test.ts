@@ -23,6 +23,7 @@ describe("resolver calls", () => {
                 "Yes",
                 "No",
                 1000,
+                "Crypto",
                 "STRK/USD",
                 100_000_000n
             )
@@ -35,7 +36,8 @@ describe("resolver calls", () => {
                 "0", "5858675", "3",
                 "0", "20079", "2",
                 "1000",
-                // 'STRK/USD' as a felt, then the threshold at the feed's 8 decimals
+                // 'Crypto', then 'STRK/USD' as felts, then the threshold at the feed's 8 decimals
+                "74158942745711",
                 "6004514686061859652",
                 "100000000",
             ],

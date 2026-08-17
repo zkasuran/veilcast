@@ -14,6 +14,9 @@ use veilcast::test_utils_contracts::mock_pool::{IMockPoolDispatcher, IMockPoolDi
 /// One STRK in the token's smallest unit.
 pub const ONE_STRK: u128 = 1_000_000_000_000_000_000;
 
+/// The category the test helper opens markets under, so a test that cares can assert on it.
+pub const TEST_CATEGORY: felt252 = 'Crypto';
+
 /// A coupon keypair: the public key owns the position, the private key releases the payout.
 pub type CouponKeyPair = KeyPair<felt252, felt252>;
 
@@ -82,6 +85,7 @@ pub impl VeilcastImpl of VeilcastTrait {
                 outcome_labels: array!["Yes", "No"],
                 :resolver,
                 :close_at,
+                category: TEST_CATEGORY,
             )
     }
 

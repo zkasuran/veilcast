@@ -750,3 +750,127 @@
 .positionActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .positionActions .btn { background: var(--inset); color: #3b3b46; }
 .positionNote { margin-top: 10px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+/* --- Board discovery: search, sections, sort ---------------------------- */
+.searchInput {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 11px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+  font-size: 14px;
+  outline: none;
+}
+.searchInput:focus { border-color: var(--pink-soft-2); }
+.searchInput::placeholder { color: var(--muted); }
+
+.selectInput {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: #3b3b46;
+  font-family: var(--font-body), sans-serif;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip {
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-family: var(--font-body), sans-serif;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 140ms, color 140ms, border-color 140ms;
+}
+.chip:hover { color: var(--ink); border-color: var(--pink-soft-2); }
+.chipActive { color: var(--pink-text); background: var(--pink-soft); border-color: var(--pink-soft-2); }
+.boardControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.marketTags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tag {
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--inset);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.marketQuestionLink { color: inherit; text-decoration: none; }
+.marketQuestionLink:hover { color: var(--pink-text); }
+
+/* --- One market's own page --------------------------------------------- */
+.detailMain { padding-top: 8px; }
+.detailTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.backLink {
+  color: var(--pink-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.backLink:hover { text-decoration: underline; }
+.detailTop .btn { background: var(--inset); color: #3b3b46; }
+
+.detailSection { margin-top: 22px; }
+.detailHead {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.factRows {
+  padding: 4px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+}
+.factRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+}
+.factRow:first-child { border-top: none; }
+.factLabel { color: var(--muted); }
+.factValue {
+  color: var(--ink);
+  font-weight: 550;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.factLink {
+  color: var(--pink-text);
+  font-family: var(--font-mono-ui), monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.factLink:hover { text-decoration: underline; }
+.notice a { color: var(--pink-text); font-weight: 600; text-decoration: none; }
+.notice a:hover { text-decoration: underline; }

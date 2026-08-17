@@ -84,11 +84,14 @@ pub mod VeilcastMarket {
         PayoutClaimed: PayoutClaimed,
     }
 
+    /// A market opened. `category` is a key so a board can subscribe to one section of the book.
     #[derive(Drop, starknet::Event)]
     pub struct MarketCreated {
         #[key]
         pub market_id: u64,
         pub resolver: ContractAddress,
+        #[key]
+        pub category: felt252,
         pub close_at: u64,
         pub n_outcomes: u8,
     }
@@ -146,12 +149,14 @@ pub mod VeilcastMarket {
             outcome_labels: Array<ByteArray>,
             resolver: ContractAddress,
             close_at: u64,
+            category: felt252,
         ) -> u64 {
             let n_labels = outcome_labels.len();
             assert(n_labels >= 2, errors::TOO_FEW_OUTCOMES);
             assert(n_labels <= MAX_OUTCOMES.into(), errors::TOO_MANY_OUTCOMES);
             assert(resolver.is_non_zero(), errors::ZERO_RESOLVER);
-            assert(close_at > get_block_timestamp(), errors::CLOSE_IN_PAST);
+            let created_at = get_block_timestamp();
+            assert(close_at > created_at, errors::CLOSE_IN_PAST);
 
             let market_id = self.n_markets.read();
             self.n_markets.write(market_id + 1);
@@ -168,13 +173,15 @@ pub mod VeilcastMarket {
                     Market {
                         resolver,
                         close_at,
+                        created_at,
+                        category,
                         n_outcomes,
                         state: MarketState::Open,
                         winning_outcome: 0,
                         pot: 0,
                     },
                 );
-            self.emit(MarketCreated { market_id, resolver, close_at, n_outcomes });
+            self.emit(MarketCreated { market_id, resolver, category, close_at, n_outcomes });
             market_id
         }
 

@@ -1,16 +1,18 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import styles from "../../../uni.module.css";
 import { voyagerContractUrl } from "@/utils/constants";
+import { categoryLabel } from "@/utils/discovery";
 import type { MarketView } from "@/utils/market";
 import { formatStrk, formatTimeLeft, impliedProbability, payoutMultiple } from "@/utils/veilcast";
 
 const ONE_STRK = 10n ** 18n;
 
 /// One market on the board: the question, a column per outcome carrying the public volume and the
-/// odds that fall out of it, and whatever the panel wants to put underneath (a bet form, the
-/// resolver's controls).
+/// odds that fall out of it, plus whatever the panel puts underneath (a bet form, the resolver's
+/// controls, a feed's settlement).
 ///
 /// Every number here is public by design. A market with hidden sizes cannot produce honest odds, so
 /// what Veilcast hides is who is behind them, which is nowhere in this data.
@@ -20,6 +22,7 @@ export default function MarketCard({
     onSelectOutcome,
     providerIndex,
     marketAddress,
+    detailHref,
     children,
 }: {
     view: MarketView;
@@ -27,6 +30,8 @@ export default function MarketCard({
     onSelectOutcome: (outcome: number | undefined) => void;
     providerIndex: number;
     marketAddress: string;
+    /// Where the question links to. Absent on the market's own page, where it would link to itself.
+    detailHref?: string;
     children?: ReactNode;
 }) {
     const now = Math.floor(Date.now() / 1000);
@@ -44,8 +49,22 @@ export default function MarketCard({
     return (
         <div className={styles.marketCard}>
             <div className={styles.marketHead}>
-                <span className={styles.marketQuestion}>{view.question}</span>
+                <span className={styles.marketQuestion}>
+                    {detailHref ? (
+                        <Link className={styles.marketQuestionLink} href={detailHref}>
+                            {view.question}
+                        </Link>
+                    ) : (
+                        view.question
+                    )}
+                </span>
                 <span className={`${styles.pill} ${statePill.tone}`}>{statePill.text}</span>
+            </div>
+            <div className={styles.marketTags}>
+                <span className={styles.tag}>{categoryLabel(view.category)}</span>
+                <span className={styles.tag}>
+                    {view.labels.length === 2 ? "binary" : `${view.labels.length} outcomes`}
+                </span>
             </div>
 
             <div className={styles.outcomes}>

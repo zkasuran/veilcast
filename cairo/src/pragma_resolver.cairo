@@ -40,6 +40,7 @@ pub trait IPragmaResolver<TState> {
         label_at_or_above: ByteArray,
         label_below: ByteArray,
         close_at: u64,
+        category: felt252,
         pair_id: felt252,
         threshold: u128,
     ) -> u64;
@@ -139,6 +140,7 @@ pub mod PragmaResolver {
             label_at_or_above: ByteArray,
             label_below: ByteArray,
             close_at: u64,
+            category: felt252,
             pair_id: felt252,
             threshold: u128,
         ) -> u64 {
@@ -152,6 +154,7 @@ pub mod PragmaResolver {
                     outcome_labels: array![label_at_or_above, label_below],
                     resolver: get_contract_address(),
                     :close_at,
+                    :category,
                 );
             self.questions.entry(market_id).write(PriceQuestion { pair_id, threshold });
             self.emit(PriceMarketOpened { market_id, pair_id, threshold, close_at });

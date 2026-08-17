@@ -25,6 +25,8 @@ function marketView(overrides: Partial<MarketView> = {}): MarketView {
         volumes: [4n * ONE_STRK, 2n * ONE_STRK],
         pot: 6n * ONE_STRK,
         closeAt: 1000,
+        createdAt: 500,
+        category: "Crypto",
         state: "Resolved",
         winningOutcome: 0,
         resolver: "0x123",
@@ -110,6 +112,8 @@ describe("decodeMarketView", () => {
         "0x0", // market_id
         "0x123", // market.resolver
         "0x3e8", // market.close_at
+        "0x1f4", // market.created_at
+        shortString.encodeShortString("Crypto"), // market.category
         "0x2", // market.n_outcomes
         "0x1", // market.state, variant index 1 = Resolved
         "0x0", // market.winning_outcome
@@ -134,6 +138,8 @@ describe("decodeMarketView", () => {
             volumes: [4n * ONE_STRK, 2n * ONE_STRK],
             pot: 6n * ONE_STRK,
             closeAt: 1000,
+            createdAt: 500,
+            category: "Crypto",
             state: "Resolved",
             winningOutcome: 0,
             resolver: "0x0000000000000000000000000000000000000000000000000000000000000123",
@@ -151,7 +157,9 @@ describe("decodeMarketView", () => {
 
 describe("market calls", () => {
     it("encodes create_market with the question and one label per outcome", () => {
-        expect(createMarketCall(MARKET, "Will STRK close above 1 USD?", ["Yes", "No"], "0x123", 1000)).toEqual({
+        expect(
+            createMarketCall(MARKET, "Will STRK close above 1 USD?", ["Yes", "No"], "0x123", 1000, "Crypto")
+        ).toEqual({
             contractAddress: MARKET,
             entrypoint: "create_market",
             calldata: [
@@ -160,8 +168,16 @@ describe("market calls", () => {
                 // two labels, each a ByteArray of one short pending word
                 "2", "0", "5858675", "3", "0", "20079", "2",
                 "291", "1000",
+                // 'Crypto' as a short string
+                "74158942745711",
             ],
         });
+    });
+
+    it("sends a zero category when the opener did not pick one", () => {
+        const calldata = createMarketCall(MARKET, "Q", ["Yes", "No"], "0x123", 1000, "")
+            .calldata as string[];
+        expect(calldata[calldata.length - 1]).toBe("0");
     });
 
     it("encodes the resolver's two calls", () => {

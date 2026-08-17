@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import styles from "../../../uni.module.css";
 import { addrSTRK } from "@/utils/constants";
 import { type MarketView, type PositionStatus, positionStatus, settledPayout } from "@/utils/market";
@@ -33,11 +34,14 @@ export default function PositionRow({
     coupon,
     view,
     stake,
+    href,
     onClaimed,
 }: {
     coupon: Coupon;
     view: MarketView | undefined;
     stake: bigint;
+    /// Where the market's name links to, when the row is shown away from that market's own page.
+    href?: string;
     onClaimed: () => void;
 }) {
     const strk20 = useStrk20();
@@ -72,7 +76,13 @@ export default function PositionRow({
         <div className={styles.positionRow}>
             <div className={styles.positionHead}>
                 <span className={styles.positionQuestion}>
-                    {view?.question ?? `Market #${coupon.marketId}`}
+                    {href ? (
+                        <Link className={styles.marketQuestionLink} href={href}>
+                            {view?.question ?? `Market #${coupon.marketId}`}
+                        </Link>
+                    ) : (
+                        (view?.question ?? `Market #${coupon.marketId}`)
+                    )}
                 </span>
                 <span className={`${styles.pill} ${styles[pill.tone]}`}>{pill.text}</span>
             </div>

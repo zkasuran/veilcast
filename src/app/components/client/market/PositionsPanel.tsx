@@ -1,61 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import styles from "../../../uni.module.css";
-import { loadStake } from "@/utils/market";
-import { type Coupon, couponsBackup, importCoupons, loadCoupons } from "@/utils/veilcast";
+import { couponsBackup, importCoupons } from "@/utils/veilcast";
 import PositionRow from "./PositionRow";
 import { useBoard } from "./useBoard";
-import { errorMessage, useStrk20 } from "../strk20/useStrk20";
+import { usePositions } from "./usePositions";
+import { useStrk20 } from "../strk20/useStrk20";
 
 /// Everything this browser holds a coupon for.
 ///
-/// The list itself is local. Nothing on-chain ties a position to an account, so there is no address
-/// to look positions up by: the coupon in localStorage is the claim. That is the whole point, and it
-/// is also the risk, which is why the backup is one click from here.
+/// The list is local. Nothing on-chain ties a position to an account, so there is no address to look
+/// positions up by: the coupon in localStorage is the claim. That is the whole point. It is also the
+/// risk, which is why the backup is one click from here.
 export default function PositionsPanel() {
     const strk20 = useStrk20();
     const { markets, refresh: refreshBoard } = useBoard();
-    const [coupons, setCoupons] = useState<Coupon[]>([]);
-    const [stakes, setStakes] = useState<Record<string, bigint>>({});
+    const positions = usePositions();
     const [note, setNote] = useState("");
     const fileInput = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        setCoupons(loadCoupons());
-    }, []);
-
-    const readStakes = useCallback(async () => {
-        if (!strk20.hasMarket || coupons.length === 0) return;
-        try {
-            const pairs = await Promise.all(
-                coupons.map(
-                    async (coupon) =>
-                        [
-                            coupon.positionKey,
-                            await loadStake(
-                                strk20.provider,
-                                strk20.marketAddress,
-                                coupon.marketId,
-                                coupon.outcome,
-                                coupon.positionKey
-                            ),
-                        ] as const
-                )
-            );
-            setStakes(Object.fromEntries(pairs));
-            setNote("");
-        } catch (failure) {
-            setNote(`Could not read positions from the chain: ${errorMessage(failure)}`);
-        }
-    }, [coupons, strk20.hasMarket, strk20.marketAddress, strk20.provider]);
-
-    useEffect(() => {
-        void readStakes();
-    }, [readStakes]);
-
     function reload() {
-        setCoupons(loadCoupons());
+        positions.reload();
         void refreshBoard();
     }
 
@@ -79,18 +45,29 @@ export default function PositionsPanel() {
         if (merged) reload();
     }
 
-    const ordered = [...coupons].sort((left, right) => right.createdAt - left.createdAt);
+    const ordered = [...positions.coupons].sort((left, right) => right.createdAt - left.createdAt);
+    const claimable = ordered.filter((coupon) => {
+        const view = markets.find((market) => market.id === coupon.marketId);
+        if (!view || positions.stakeOf(coupon) === 0n) return false;
+        return view.state === "Void" || (view.state === "Resolved" && view.winningOutcome === coupon.outcome);
+    }).length;
 
     return (
         <div className={styles.panelWide}>
             <div className={styles.boardHead}>
                 <span className={styles.boardCount}>
-                    {coupons.length === 0 ? "No positions in this browser" : `${coupons.length} positions`}
+                    {positions.coupons.length === 0
+                        ? "No positions in this browser"
+                        : `${positions.coupons.length} positions${claimable > 0 ? `, ${claimable} to collect` : ""}`}
                 </span>
                 <button className={styles.btn} onClick={reload}>
                     Refresh
                 </button>
-                <button className={styles.btn} onClick={download} disabled={coupons.length === 0}>
+                <button
+                    className={styles.btn}
+                    onClick={download}
+                    disabled={positions.coupons.length === 0}
+                >
                     Back up coupons
                 </button>
                 <button className={styles.btn} onClick={() => fileInput.current?.click()}>
@@ -106,8 +83,9 @@ export default function PositionsPanel() {
             </div>
 
             {note ? <div className={styles.notice}>{note}</div> : null}
+            {positions.error ? <div className={styles.warn}>{positions.error}</div> : null}
 
-            {coupons.length === 0 ? (
+            {positions.coupons.length === 0 ? (
                 <div className={styles.notice}>
                     A bet writes its coupon here. The coupon is a keypair generated in this browser and
                     stored nowhere else, so back it up: whoever holds it collects the payout, and nobody
@@ -120,7 +98,8 @@ export default function PositionsPanel() {
                     key={coupon.positionKey}
                     coupon={coupon}
                     view={markets.find((market) => market.id === coupon.marketId)}
-                    stake={stakes[coupon.positionKey] ?? BigInt(coupon.amount)}
+                    stake={positions.stakeOf(coupon)}
+                    href={`/market/?id=${coupon.marketId}`}
                     onClaimed={reload}
                 />
             ))}

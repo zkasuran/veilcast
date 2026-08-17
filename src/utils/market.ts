@@ -2,6 +2,7 @@
 
 import { CairoCustomEnum, Contract, num, type Abi, type Call, type ProviderInterface } from "starknet";
 import marketAbi from "@/abi/veilcastMarket.json";
+import { decodeCategory, encodeCategory } from "./discovery";
 
 const ABI = marketAbi as Abi;
 
@@ -21,6 +22,11 @@ export type MarketView = {
     pot: bigint;
     /// Unix seconds. Bets are refused from this point, resolution is refused before it.
     closeAt: number;
+    /// Unix seconds when the market was opened, which is what "newest" on the board sorts by.
+    createdAt: number;
+    /// The opener's own word for what the question is about, decoded from a short string. Empty
+    /// means they did not say.
+    category: string;
     state: MarketState;
     /// Meaningful only when `state` is "Resolved".
     winningOutcome: number;
@@ -65,14 +71,22 @@ export async function loadStake(
 }
 
 /// Opens a market. Anyone may open one; `resolver` is the only address that can settle it.
+/// `category` is a plain word the board groups by, and "" means uncategorised.
 export function createMarketCall(
     address: string,
     question: string,
     labels: string[],
     resolver: string,
-    closeAt: number
+    closeAt: number,
+    category: string
 ): Call {
-    return marketContract(address).populate("create_market", [question, labels, resolver, closeAt]);
+    return marketContract(address).populate("create_market", [
+        question,
+        labels,
+        resolver,
+        closeAt,
+        encodeCategory(category),
+    ]);
 }
 
 /// Settles a closed market on `winningOutcome`. Resolver only, enforced on-chain.
@@ -125,6 +139,8 @@ export function decodeMarketView(raw: unknown): MarketView {
         market: {
             resolver: bigint;
             close_at: bigint;
+            created_at: bigint;
+            category: bigint;
             n_outcomes: bigint;
             state: unknown;
             winning_outcome: bigint;
@@ -141,6 +157,8 @@ export function decodeMarketView(raw: unknown): MarketView {
         volumes: view.outcome_volumes.map((volume) => BigInt(volume)),
         pot: BigInt(view.market.pot),
         closeAt: Number(view.market.close_at),
+        createdAt: Number(view.market.created_at),
+        category: decodeCategory(view.market.category),
         state: decodeMarketState(view.market.state),
         winningOutcome: Number(view.market.winning_outcome),
         resolver: num.toHex64(view.market.resolver),

@@ -61,6 +61,10 @@
             "type": "core::integer::u64"
           },
           {
+            "name": "category",
+            "type": "core::felt252"
+          },
+          {
             "name": "pair_id",
             "type": "core::felt252"
           },

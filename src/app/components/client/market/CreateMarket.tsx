@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import styles from "../../../uni.module.css";
+import { CATEGORIES } from "@/utils/discovery";
 import { createMarketCall } from "@/utils/market";
 import { PAIRS, openPriceMarketCall, parseThreshold } from "@/utils/resolver";
 import { MAX_OUTCOMES } from "@/utils/veilcast";
@@ -18,6 +19,7 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
     const [question, setQuestion] = useState("");
     const [labelText, setLabelText] = useState("Yes, No");
     const [hours, setHours] = useState("24");
+    const [category, setCategory] = useState<string>(CATEGORIES[0]);
     const [feed, setFeed] = useState(false);
     const [ticker, setTicker] = useState<string>(PAIRS[0].ticker);
     const [thresholdText, setThresholdText] = useState("");
@@ -54,6 +56,7 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                         labels[0],
                         labels[1],
                         closeAt,
+                        category,
                         pair.ticker,
                         threshold
                     )
@@ -62,7 +65,8 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                         question.trim(),
                         labels,
                         strk20.address,
-                        closeAt
+                        closeAt,
+                        category
                     );
             const txHash = await strk20.execute([call], setResult, question.trim());
             if (txHash) {
@@ -104,14 +108,29 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                 placeholder="Yes, No"
                 aria-label="Outcomes, comma separated"
             />
-            <input
-                className={styles.textInput}
-                value={hours}
-                onChange={(event) => setHours(event.target.value)}
-                inputMode="decimal"
-                placeholder="Hours open"
-                aria-label="Hours the market stays open"
-            />
+            <div className={styles.feedFields}>
+                <select
+                    className={styles.textInput}
+                    value={category}
+                    onChange={(event) => setCategory(event.target.value)}
+                    aria-label="Category"
+                >
+                    {CATEGORIES.map((option) => (
+                        <option key={option} value={option}>
+                            {option}
+                        </option>
+                    ))}
+                    <option value="">Uncategorised</option>
+                </select>
+                <input
+                    className={styles.textInput}
+                    value={hours}
+                    onChange={(event) => setHours(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="Hours open"
+                    aria-label="Hours the market stays open"
+                />
+            </div>
 
             {strk20.hasResolver ? (
                 <label className={styles.feedToggle}>

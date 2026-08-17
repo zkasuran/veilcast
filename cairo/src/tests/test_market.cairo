@@ -4,7 +4,7 @@ use snforge_std::signature::stark_curve::StarkCurveSignerImpl;
 use snforge_std::{
     start_cheat_block_timestamp_global, start_cheat_caller_address, stop_cheat_caller_address,
 };
-use starknet::ContractAddress;
+use starknet::{ContractAddress, get_block_timestamp};
 use veilcast::interface::{
     BetInput, ClaimInput, IVeilcastMarketDispatcherTrait, IVeilcastMarketSafeDispatcher,
     IVeilcastMarketSafeDispatcherTrait, MarketAction, MarketState, PayoutTarget, errors,
@@ -13,7 +13,8 @@ use veilcast::market::{VOID_GRACE, claim_message_hash};
 use veilcast::test_utils_contracts::mock_erc20::IMockErc20DispatcherTrait;
 use veilcast::test_utils_contracts::mock_pool::IMockPoolDispatcherTrait;
 use veilcast::tests::test_utils::{
-    CouponKeyPair, ONE_STRK, Veilcast, VeilcastTrait, assert_panic, deploy_veilcast, new_coupon,
+    CouponKeyPair, ONE_STRK, TEST_CATEGORY, Veilcast, VeilcastTrait, assert_panic, deploy_veilcast,
+    new_coupon,
 };
 
 const CLOSE_AT: u64 = 1000;
@@ -44,6 +45,9 @@ fn test_create_market_and_views() {
     let market = veilcast.market.get_market(market_id);
     assert_eq!(market.resolver, resolver);
     assert_eq!(market.close_at, CLOSE_AT);
+    assert_eq!(market.category, TEST_CATEGORY);
+    // Opened now, which is what lets a board sort by age without an indexer.
+    assert_eq!(market.created_at, get_block_timestamp());
     assert_eq!(market.n_outcomes, 2);
     assert_eq!(market.state, MarketState::Open);
     assert_eq!(market.pot, 0);
@@ -70,7 +74,11 @@ fn test_create_market_rejects_bad_input() {
     assert_panic(
         market
             .create_market(
-                question: "Q", outcome_labels: array!["Only one"], :resolver, close_at: CLOSE_AT,
+                question: "Q",
+                outcome_labels: array!["Only one"],
+                :resolver,
+                close_at: CLOSE_AT,
+                category: 'Crypto',
             ),
         errors::TOO_FEW_OUTCOMES,
     );
@@ -81,6 +89,7 @@ fn test_create_market_rejects_bad_input() {
                 outcome_labels: array!["1", "2", "3", "4", "5", "6", "7", "8", "9"],
                 :resolver,
                 close_at: CLOSE_AT,
+                category: 'Crypto',
             ),
         errors::TOO_MANY_OUTCOMES,
     );
@@ -91,13 +100,18 @@ fn test_create_market_rejects_bad_input() {
                 outcome_labels: array!["Yes", "No"],
                 resolver: Zero::zero(),
                 close_at: CLOSE_AT,
+                category: 'Crypto',
             ),
         errors::ZERO_RESOLVER,
     );
     assert_panic(
         market
             .create_market(
-                question: "Q", outcome_labels: array!["Yes", "No"], :resolver, close_at: 0,
+                question: "Q",
+                outcome_labels: array!["Yes", "No"],
+                :resolver,
+                close_at: 0,
+                category: 'Crypto',
             ),
         errors::CLOSE_IN_PAST,
     );
@@ -486,6 +500,7 @@ fn test_market_views_render_the_whole_board() {
     assert_eq!(view.market.pot, @(2 * ONE_STRK));
     assert_eq!(view.market.state, @MarketState::Open);
     assert_eq!(view.market.resolver, @resolver);
+    assert_eq!(view.market.category, @TEST_CATEGORY);
     assert_eq!(*views.at(1).market_id, 1);
 
     // A window inside the board, and one that runs off the end.

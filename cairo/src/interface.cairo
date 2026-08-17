@@ -94,8 +94,13 @@ pub struct Market {
     /// The only address allowed to resolve or void this market. An oracle adapter contract can
     /// hold this role, which is how price questions resolve without the market hardcoding a feed.
     pub resolver: ContractAddress,
-    /// Bets are rejected from this timestamp on, and resolution is refused before it.
+    /// Bets are rejected from this timestamp on. Resolution is refused before it.
     pub close_at: u64,
+    /// When the market was opened, so a board can sort by age without an indexer.
+    pub created_at: u64,
+    /// What the question is about, as a short string: 'Crypto', 'Sports', 'Politics'. Zero means
+    /// the opener did not say, which a board shows as uncategorised rather than hiding.
+    pub category: felt252,
     pub n_outcomes: u8,
     pub state: MarketState,
     /// Meaningful only in state `Resolved`.
@@ -121,12 +126,16 @@ pub struct MarketView {
 #[starknet::interface]
 pub trait IVeilcastMarket<TState> {
     /// Opens a market on `question` with one label per outcome. Returns its id.
+    ///
+    /// `category` is a short string a board groups by, and it is the opener's word rather than
+    /// anything the contract checks. Zero is allowed and means uncategorised.
     fn create_market(
         ref self: TState,
         question: ByteArray,
         outcome_labels: Array<ByteArray>,
         resolver: ContractAddress,
         close_at: u64,
+        category: felt252,
     ) -> u64;
 
     /// Settles `market_id` on `winning_outcome`. Resolver only, and only once the market has
