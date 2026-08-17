@@ -1,3 +1,4 @@
+use core::num::traits::Zero;
 use core::panic_with_felt252;
 use snforge_std::signature::stark_curve::{StarkCurveKeyPairImpl, StarkCurveSignerImpl};
 use snforge_std::signature::{KeyPair, KeyPairTrait, SignerTrait};
@@ -77,8 +78,19 @@ pub fn assert_panic<T, +Drop<T>>(result: Result<T, Array<felt252>>, expected: fe
 
 #[generate_trait]
 pub impl VeilcastImpl of VeilcastTrait {
-    /// Opens a two-outcome market closing at `close_at`, resolved by `resolver`.
+    /// Opens a two-outcome market closing at `close_at`, resolved by `resolver`, with no fee.
     fn create_binary_market(self: @Veilcast, resolver: ContractAddress, close_at: u64) -> u64 {
+        self.create_market_with_fee(:resolver, :close_at, fee_bps: 0, fee_recipient: Zero::zero())
+    }
+
+    /// The same market, charging `fee_bps` of the pot to `fee_recipient` at settlement.
+    fn create_market_with_fee(
+        self: @Veilcast,
+        resolver: ContractAddress,
+        close_at: u64,
+        fee_bps: u16,
+        fee_recipient: ContractAddress,
+    ) -> u64 {
         (*self.market)
             .create_market(
                 question: "Will STRK close above 1 USD?",
@@ -86,6 +98,8 @@ pub impl VeilcastImpl of VeilcastTrait {
                 :resolver,
                 :close_at,
                 category: TEST_CATEGORY,
+                :fee_bps,
+                :fee_recipient,
             )
     }
 

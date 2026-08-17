@@ -3,7 +3,7 @@
 import { useState } from "react";
 import styles from "../../../uni.module.css";
 import { CATEGORIES } from "@/utils/discovery";
-import { createMarketCall } from "@/utils/market";
+import { MAX_FEE_BPS, createMarketCall } from "@/utils/market";
 import { PAIRS, openPriceMarketCall, parseThreshold } from "@/utils/resolver";
 import { MAX_OUTCOMES } from "@/utils/veilcast";
 import ResultCard from "../strk20/ResultCard";
@@ -23,6 +23,7 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
     const [feed, setFeed] = useState(false);
     const [ticker, setTicker] = useState<string>(PAIRS[0].ticker);
     const [thresholdText, setThresholdText] = useState("");
+    const [feePercent, setFeePercent] = useState("0");
     const [result, setResult] = useState<ActionResult | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -31,12 +32,16 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
     const pair = PAIRS.find((candidate) => candidate.ticker === ticker) ?? PAIRS[0];
     const threshold = parseThreshold(thresholdText, pair.decimals);
     const boundToFeed = feed && strk20.hasResolver;
+    // A percent in the form, basis points on-chain. 5% is the contract's cap.
+    const feeBps = Math.round(Number(feePercent) * 100);
+    const feeOk = Number.isFinite(feeBps) && feeBps >= 0 && feeBps <= MAX_FEE_BPS;
     const ready =
         question.trim().length > 0 &&
         labels.length >= 2 &&
         labels.length <= MAX_OUTCOMES &&
         Number.isFinite(hoursOpen) &&
         hoursOpen > 0 &&
+        feeOk &&
         strk20.isConnected &&
         strk20.hasMarket &&
         // A price question has exactly two sides: at or above the line, and below it.
@@ -58,7 +63,8 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                         closeAt,
                         category,
                         pair.ticker,
-                        threshold
+                        threshold,
+                        feeBps
                     )
                     : createMarketCall(
                         strk20.marketAddress,
@@ -66,7 +72,9 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                         labels,
                         strk20.address,
                         closeAt,
-                        category
+                        category,
+                        feeBps,
+                        strk20.address
                     );
             const txHash = await strk20.execute([call], setResult, question.trim());
             if (txHash) {
@@ -130,7 +138,21 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                     placeholder="Hours open"
                     aria-label="Hours the market stays open"
                 />
+                <input
+                    className={styles.textInput}
+                    value={feePercent}
+                    onChange={(event) => setFeePercent(event.target.value)}
+                    inputMode="decimal"
+                    placeholder="Fee %"
+                    aria-label="Your fee, as a percent of the pot"
+                />
             </div>
+
+            {!feeOk ? (
+                <div className={styles.warn}>
+                    A fee has to be between 0 and {MAX_FEE_BPS / 100}% of the pot.
+                </div>
+            ) : null}
 
             {strk20.hasResolver ? (
                 <label className={styles.feedToggle}>
@@ -178,6 +200,15 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                         resolver: you settle it once it closes, or void it and every stake is
                         refundable.
                     </>
+                )}
+                {feeBps > 0 ? (
+                    <>
+                        {" "}
+                        Your fee is {feeBps / 100}% of the pot, charged once when the market settles,
+                        shown on the board from the moment it opens. A void market charges nothing.
+                    </>
+                ) : (
+                    " No fee: the winning side splits the whole pot."
                 )}
             </div>
             <button className={styles.btnCta} disabled={!ready || busy} onClick={create}>

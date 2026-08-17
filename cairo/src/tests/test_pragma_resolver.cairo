@@ -65,6 +65,7 @@ impl PriceMarketImpl of PriceMarketTrait {
                 category: 'Crypto',
                 pair_id: STRK_USD,
                 threshold: ONE_DOLLAR,
+                fee_bps: 0,
             )
     }
 
@@ -251,6 +252,7 @@ fn test_open_price_market_rejects_a_question_with_no_feed_behind_it() {
                 category: 'Crypto',
                 pair_id: 0,
                 threshold: ONE_DOLLAR,
+                fee_bps: 0,
             ),
         errors::ZERO_PAIR_ID,
     );
@@ -264,6 +266,7 @@ fn test_open_price_market_rejects_a_question_with_no_feed_behind_it() {
                 category: 'Crypto',
                 pair_id: STRK_USD,
                 threshold: 0,
+                fee_bps: 0,
             ),
         errors::ZERO_THRESHOLD,
     );

@@ -71,6 +71,10 @@
           {
             "name": "threshold",
             "type": "core::integer::u128"
+          },
+          {
+            "name": "fee_bps",
+            "type": "core::integer::u16"
           }
         ],
         "outputs": [

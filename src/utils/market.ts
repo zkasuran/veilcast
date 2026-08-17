@@ -6,6 +6,10 @@ import { decodeCategory, encodeCategory } from "./discovery";
 
 const ABI = marketAbi as Abi;
 
+/// Most a market may charge its bettors, in basis points, mirroring `MAX_FEE_BPS` in
+/// cairo/src/market.cairo. The contract enforces it; this is so the form can too.
+export const MAX_FEE_BPS = 500;
+
 /// Lifecycle of a market, mirroring `MarketState` in cairo/src/interface.cairo.
 export type MarketState = "Open" | "Resolved" | "Void";
 
@@ -27,6 +31,12 @@ export type MarketView = {
     /// The opener's own word for what the question is about, decoded from a short string. Empty
     /// means they did not say.
     category: string;
+    /// The opener's cut of the pot at settlement, in basis points, fixed when the market opened.
+    feeBps: number;
+    /// Where that cut goes. The zero address when there is no fee.
+    feeRecipient: string;
+    /// What the fee comes to, once the market has resolved and before anyone has collected it.
+    feeOwed: bigint;
     state: MarketState;
     /// Meaningful only when `state` is "Resolved".
     winningOutcome: number;
@@ -71,14 +81,17 @@ export async function loadStake(
 }
 
 /// Opens a market. Anyone may open one; `resolver` is the only address that can settle it.
-/// `category` is a plain word the board groups by, and "" means uncategorised.
+/// `category` is a plain word the board groups by, and "" means uncategorised. `feeBps` is the
+/// opener's cut of the pot at settlement, paid to `feeRecipient`.
 export function createMarketCall(
     address: string,
     question: string,
     labels: string[],
     resolver: string,
     closeAt: number,
-    category: string
+    category: string,
+    feeBps = 0,
+    feeRecipient = "0x0"
 ): Call {
     return marketContract(address).populate("create_market", [
         question,
@@ -86,7 +99,14 @@ export function createMarketCall(
         resolver,
         closeAt,
         encodeCategory(category),
+        feeBps,
+        feeBps > 0 ? feeRecipient : "0x0",
     ]);
+}
+
+/// Pays a resolved market's fee to the address it was opened with. Anyone may send it.
+export function collectFeeCall(address: string, marketId: number): Call {
+    return marketContract(address).populate("collect_fee", [marketId]);
 }
 
 /// Settles a closed market on `winningOutcome`. Resolver only, enforced on-chain.
@@ -100,15 +120,34 @@ export function voidCall(address: string, marketId: number): Call {
     return marketContract(address).populate("void", [marketId]);
 }
 
-/// What a settled position collects, mirroring `payout_share` in cairo/src/market.cairo: the whole
-/// pot split across the winning side in proportion to stake, truncating like integer division does.
-/// A void market refunds the stake itself, and a losing position is worth nothing.
+/// What a settled position collects, mirroring `payout_share` in cairo/src/market.cairo: the pot
+/// less the market's fee, split across the winning side in proportion to stake, truncating like
+/// integer division does. A void market refunds the stake itself and charges nothing, and a losing
+/// position is worth nothing.
 export function settledPayout(view: MarketView, outcome: number, stake: bigint): bigint {
     if (view.state === "Void") return stake;
     if (view.state !== "Resolved" || outcome !== view.winningOutcome) return 0n;
-    const winningVolume = view.volumes[outcome] ?? 0n;
-    if (winningVolume === 0n) return 0n;
-    return (stake * view.pot) / winningVolume;
+    return share(stake, view.pot - view.feeOwed, view.volumes[outcome] ?? 0n);
+}
+
+/// What a stake would collect if its outcome won, mirroring `quote_payout`: the settled share for a
+/// resolved market, or, while the market is open, the share this stake would take of a pot that
+/// already counts it, net of the fee settlement will charge.
+export function quotePayout(view: MarketView, outcome: number, stake: bigint): bigint {
+    if (view.state !== "Open") return settledPayout(view, outcome, stake);
+    const gross = view.pot + stake;
+    return share(stake, gross - feeOn(gross, view.feeBps), (view.volumes[outcome] ?? 0n) + stake);
+}
+
+/// `pot * feeBps / 10000`, truncating, exactly as the contract computes it.
+export function feeOn(pot: bigint, feeBps: number): bigint {
+    if (feeBps <= 0) return 0n;
+    return (pot * BigInt(feeBps)) / 10_000n;
+}
+
+function share(stake: bigint, pot: bigint, winningVolume: bigint): bigint {
+    if (winningVolume <= 0n) return 0n;
+    return (stake * pot) / winningVolume;
 }
 
 /// Where a position stands, which is what the Positions tab shows and what gates its claim button.
@@ -145,6 +184,9 @@ export function decodeMarketView(raw: unknown): MarketView {
             state: unknown;
             winning_outcome: bigint;
             pot: bigint;
+            fee_bps: bigint;
+            fee_recipient: bigint;
+            fee_owed: bigint;
         };
         question: string;
         outcome_labels: string[];
@@ -159,6 +201,9 @@ export function decodeMarketView(raw: unknown): MarketView {
         closeAt: Number(view.market.close_at),
         createdAt: Number(view.market.created_at),
         category: decodeCategory(view.market.category),
+        feeBps: Number(view.market.fee_bps),
+        feeRecipient: num.toHex64(view.market.fee_recipient),
+        feeOwed: BigInt(view.market.fee_owed),
         state: decodeMarketState(view.market.state),
         winningOutcome: Number(view.market.winning_outcome),
         resolver: num.toHex64(view.market.resolver),

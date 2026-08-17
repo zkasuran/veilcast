@@ -267,12 +267,20 @@ export function impliedProbability(outcomeVolume: bigint, pot: bigint, nOutcomes
 
 /// What a fresh `stake` on an outcome would return if that outcome won, as a multiple of the
 /// stake. Mirrors `quote_payout` on an open market: the stake counts itself into both the pot and
-/// the winning side, so the number a bettor sees is the one the contract would pay.
-export function payoutMultiple(outcomeVolume: bigint, pot: bigint, stake: bigint): number {
+/// the winning side, and the market's fee comes off the pot, so the number a bettor sees is the one
+/// the contract would pay.
+export function payoutMultiple(
+    outcomeVolume: bigint,
+    pot: bigint,
+    stake: bigint,
+    feeBps = 0
+): number {
     if (stake <= 0n) return 0;
     const winningVolume = outcomeVolume + stake;
     if (winningVolume === 0n) return 0;
-    const payout = (stake * (pot + stake)) / winningVolume;
+    const gross = pot + stake;
+    const net = gross - (gross * BigInt(Math.max(0, feeBps))) / 10_000n;
+    const payout = (stake * net) / winningVolume;
     return Number((payout * 10_000n) / stake) / 10_000;
 }
 

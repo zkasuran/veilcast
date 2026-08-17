@@ -3,14 +3,18 @@ import { describe, expect, it } from "vitest";
 import marketAbi from "@/abi/veilcastMarket.json";
 import {
     type MarketView,
+    collectFeeCall,
     createMarketCall,
     decodeMarketState,
     decodeMarketView,
+    feeOn,
     positionStatus,
+    quotePayout,
     resolveCall,
     settledPayout,
     voidCall,
 } from "./market";
+import { payoutMultiple } from "./veilcast";
 
 const MARKET = "0x4d41524b4554";
 const ONE_STRK = 10n ** 18n;
@@ -27,6 +31,9 @@ function marketView(overrides: Partial<MarketView> = {}): MarketView {
         closeAt: 1000,
         createdAt: 500,
         category: "Crypto",
+        feeBps: 0,
+        feeRecipient: "0x0",
+        feeOwed: 0n,
         state: "Resolved",
         winningOutcome: 0,
         resolver: "0x123",
@@ -118,6 +125,9 @@ describe("decodeMarketView", () => {
         "0x1", // market.state, variant index 1 = Resolved
         "0x0", // market.winning_outcome
         num.toHex(6n * ONE_STRK), // market.pot
+        "0xc8", // market.fee_bps, 2%
+        "0x456", // market.fee_recipient
+        num.toHex(120n * ONE_STRK / 1000n), // market.fee_owed, 2% of the pot
         // question, as a ByteArray: no full 31-byte words, one pending word, its length
         "0x0", shortString.encodeShortString("Will STRK win?"), "0xe",
         "0x2", // two labels, each its own ByteArray
@@ -140,6 +150,9 @@ describe("decodeMarketView", () => {
             closeAt: 1000,
             createdAt: 500,
             category: "Crypto",
+            feeBps: 200,
+            feeRecipient: "0x0000000000000000000000000000000000000000000000000000000000000456",
+            feeOwed: 120_000_000_000_000_000n,
             state: "Resolved",
             winningOutcome: 0,
             resolver: "0x0000000000000000000000000000000000000000000000000000000000000123",
@@ -151,14 +164,70 @@ describe("decodeMarketView", () => {
         const view = decodeMarketView(parsed[0]);
 
         expect(view.labels[view.winningOutcome]).toBe("Yes");
-        expect(settledPayout(view, 0, 4n * ONE_STRK)).toBe(6n * ONE_STRK);
+        // The whole winning side collects the pot less the 2% this market charges.
+        expect(settledPayout(view, 0, 4n * ONE_STRK)).toBe(5_880_000_000_000_000_000n);
+    });
+});
+
+describe("the market's fee", () => {
+    /// The same numbers `test_fee_is_charged_once_at_settlement` asserts in Cairo: a 4 STRK pot at
+    /// 2%, so 0.08 to the opener and 3.92 for the only winning coupon.
+    const settled = marketView({
+        volumes: [3n * ONE_STRK, ONE_STRK],
+        pot: 4n * ONE_STRK,
+        feeBps: 200,
+        feeOwed: 80_000_000_000_000_000n,
+    });
+
+    it("comes off the pot before the winning side splits it", () => {
+        expect(feeOn(4n * ONE_STRK, 200)).toBe(80_000_000_000_000_000n);
+        expect(settledPayout(settled, 0, 3n * ONE_STRK)).toBe(3_920_000_000_000_000_000n);
+    });
+
+    it("is in the quote a bettor sees before betting", () => {
+        // An empty book at 5%: one STRK in, 0.95 out.
+        const empty = marketView({ volumes: [0n, 0n], pot: 0n, feeBps: 500, feeOwed: 0n, state: "Open" });
+        expect(quotePayout(empty, 0, ONE_STRK)).toBe(950_000_000_000_000_000n);
+        expect(payoutMultiple(0n, 0n, ONE_STRK, 500)).toBeCloseTo(0.95);
+
+        // 3 on Yes, 1 on No, one more STRK on Yes: 5 STRK less 5% over 4 STRK of Yes.
+        const open = marketView({
+            volumes: [3n * ONE_STRK, ONE_STRK],
+            pot: 4n * ONE_STRK,
+            feeBps: 500,
+            feeOwed: 0n,
+            state: "Open",
+        });
+        expect(quotePayout(open, 0, ONE_STRK)).toBe(1_187_500_000_000_000_000n);
+        expect(payoutMultiple(3n * ONE_STRK, 4n * ONE_STRK, ONE_STRK, 500)).toBeCloseTo(1.1875);
+    });
+
+    it("charges nothing on a void market, whatever the market advertised", () => {
+        const voided = marketView({ state: "Void", feeBps: 500, feeOwed: 0n });
+        expect(settledPayout(voided, 0, 3n * ONE_STRK)).toBe(3n * ONE_STRK);
+        expect(quotePayout(voided, 0, 3n * ONE_STRK)).toBe(3n * ONE_STRK);
+    });
+
+    it("truncates the fee, so the dust stays with the bettors", () => {
+        // 1% of 999 wei is 9.99, and the market keeps 9.
+        expect(feeOn(999n, 100)).toBe(9n);
+        expect(feeOn(999n, 0)).toBe(0n);
     });
 });
 
 describe("market calls", () => {
     it("encodes create_market with the question and one label per outcome", () => {
         expect(
-            createMarketCall(MARKET, "Will STRK close above 1 USD?", ["Yes", "No"], "0x123", 1000, "Crypto")
+            createMarketCall(
+                MARKET,
+                "Will STRK close above 1 USD?",
+                ["Yes", "No"],
+                "0x123",
+                1000,
+                "Crypto",
+                200,
+                "0x456"
+            )
         ).toEqual({
             contractAddress: MARKET,
             entrypoint: "create_market",
@@ -168,8 +237,8 @@ describe("market calls", () => {
                 // two labels, each a ByteArray of one short pending word
                 "2", "0", "5858675", "3", "0", "20079", "2",
                 "291", "1000",
-                // 'Crypto' as a short string
-                "74158942745711",
+                // 'Crypto' as a short string, then 200 bps to its recipient
+                "74158942745711", "200", "1110",
             ],
         });
     });
@@ -177,7 +246,21 @@ describe("market calls", () => {
     it("sends a zero category when the opener did not pick one", () => {
         const calldata = createMarketCall(MARKET, "Q", ["Yes", "No"], "0x123", 1000, "")
             .calldata as string[];
-        expect(calldata[calldata.length - 1]).toBe("0");
+        expect(calldata[calldata.length - 3]).toBe("0");
+    });
+
+    it("drops the fee recipient when there is no fee to pay it", () => {
+        const calldata = createMarketCall(MARKET, "Q", ["Yes", "No"], "0x123", 1000, "Crypto", 0, "0x456")
+            .calldata as string[];
+        expect(calldata.slice(-2)).toEqual(["0", "0"]);
+    });
+
+    it("encodes the fee payout call, which carries nothing but the market id", () => {
+        expect(collectFeeCall(MARKET, 7)).toEqual({
+            contractAddress: MARKET,
+            entrypoint: "collect_fee",
+            calldata: ["7"],
+        });
     });
 
     it("encodes the resolver's two calls", () => {

@@ -183,6 +183,18 @@
       {
         "name": "pot",
         "type": "core::integer::u128"
+      },
+      {
+        "name": "fee_bps",
+        "type": "core::integer::u16"
+      },
+      {
+        "name": "fee_recipient",
+        "type": "core::starknet::contract_address::ContractAddress"
+      },
+      {
+        "name": "fee_owed",
+        "type": "core::integer::u128"
       }
     ]
   },
@@ -249,6 +261,14 @@
           {
             "name": "category",
             "type": "core::felt252"
+          },
+          {
+            "name": "fee_bps",
+            "type": "core::integer::u16"
+          },
+          {
+            "name": "fee_recipient",
+            "type": "core::starknet::contract_address::ContractAddress"
           }
         ],
         "outputs": [
@@ -256,6 +276,18 @@
             "type": "core::integer::u64"
           }
         ],
+        "state_mutability": "external"
+      },
+      {
+        "type": "function",
+        "name": "collect_fee",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          }
+        ],
+        "outputs": [],
         "state_mutability": "external"
       },
       {
@@ -527,6 +559,11 @@
         "name": "n_outcomes",
         "type": "core::integer::u8",
         "kind": "data"
+      },
+      {
+        "name": "fee_bps",
+        "type": "core::integer::u16",
+        "kind": "data"
       }
     ]
   },
@@ -620,6 +657,28 @@
   },
   {
     "type": "event",
+    "name": "veilcast::market::VeilcastMarket::FeeCollected",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "key"
+      },
+      {
+        "name": "recipient",
+        "type": "core::starknet::contract_address::ContractAddress",
+        "kind": "key"
+      },
+      {
+        "name": "amount",
+        "type": "core::integer::u128",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
     "name": "veilcast::market::VeilcastMarket::Event",
     "kind": "enum",
     "variants": [
@@ -646,6 +705,11 @@
       {
         "name": "PayoutClaimed",
         "type": "veilcast::market::VeilcastMarket::PayoutClaimed",
+        "kind": "nested"
+      },
+      {
+        "name": "FeeCollected",
+        "type": "veilcast::market::VeilcastMarket::FeeCollected",
         "kind": "nested"
       }
     ]

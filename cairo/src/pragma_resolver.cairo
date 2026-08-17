@@ -33,7 +33,7 @@ pub struct PriceQuestion {
 pub trait IPragmaResolver<TState> {
     /// Opens a market on the Veilcast market contract with this contract as its resolver, bound to
     /// `pair_id` and `threshold`. Returns the new market's id. Permissionless: anyone may open one,
-    /// and nobody gains anything by doing so.
+    /// and nobody gains anything by doing so except whatever `fee_bps` they set for themselves.
     fn open_price_market(
         ref self: TState,
         question: ByteArray,
@@ -43,6 +43,7 @@ pub trait IPragmaResolver<TState> {
         category: felt252,
         pair_id: felt252,
         threshold: u128,
+        fee_bps: u16,
     ) -> u64;
 
     /// Settles a bound market from the feed. Callable by anyone, once the market has closed, which
@@ -76,7 +77,7 @@ pub mod PragmaResolver {
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
-    use starknet::{ContractAddress, get_block_timestamp, get_contract_address};
+    use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use veilcast::interface::{IVeilcastMarketDispatcher, IVeilcastMarketDispatcherTrait};
     use veilcast::pragma::{DataType, IPragmaOracleDispatcher, IPragmaOracleDispatcherTrait};
     use super::{IPragmaResolver, OUTCOME_AT_OR_ABOVE, OUTCOME_BELOW, PriceQuestion, errors};
@@ -143,6 +144,7 @@ pub mod PragmaResolver {
             category: felt252,
             pair_id: felt252,
             threshold: u128,
+            fee_bps: u16,
         ) -> u64 {
             assert(pair_id.is_non_zero(), errors::ZERO_PAIR_ID);
             assert(threshold.is_non_zero(), errors::ZERO_THRESHOLD);
@@ -155,6 +157,10 @@ pub mod PragmaResolver {
                     resolver: get_contract_address(),
                     :close_at,
                     :category,
+                    :fee_bps,
+                    // Whoever opened it collects the fee. This contract could not: it has no way to
+                    // move a token balance out again.
+                    fee_recipient: get_caller_address(),
                 );
             self.questions.entry(market_id).write(PriceQuestion { pair_id, threshold });
             self.emit(PriceMarketOpened { market_id, pair_id, threshold, close_at });

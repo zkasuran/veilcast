@@ -72,12 +72,27 @@ the transaction.
 
 There is no counterparty to match and no order book. Every stake goes into one pot, and when the
 market settles the whole pot is split across the winning side in proportion to stake. That is why
-the odds move as volume arrives, and why the app quotes what a stake would pay including itself:
+the odds move as volume arrives and why the app quotes what a stake would pay including itself:
 `stake * pot / winning_volume`, the same integer arithmetic the contract runs.
 
 Two edges are handled rather than left to chance. A market resolved on an outcome nobody backed
 voids instead of stranding the pot, so every stake becomes refundable. A resolver who goes silent
 cannot lock the pot either: 30 days past the close, anyone can void the market.
+
+### The fee, if a market has one
+
+Whoever opens a market may set a fee, up to 5% of the pot, paid to an address they name. It is
+charged once, at settlement, on the gross pot, and it comes out of what the winning side splits. Four
+things make it safe to bet against:
+
+- it is fixed when the market opens and shown on the board from that moment, so nobody bets without
+  seeing it
+- the cap is in the contract, so a market cannot be opened as a fee trap
+- a void market charges nothing, because nothing happened
+- the quote a bettor sees is already net of it, and the rounding dust stays with the bettors
+
+Paying it out is a separate, permissionless call: the destination was fixed when the market opened,
+so whoever sends it only pays the transaction fee.
 
 ### Resolution
 
@@ -132,9 +147,9 @@ address anywhere in it.
 
 | | |
 |---|---|
-| Cairo market contract | done, 24 tests green under Starknet Foundry |
+| Cairo market contract | done, 27 tests green under Starknet Foundry |
 | Pragma resolver contract | done, covered by those tests against a mock feed |
-| App: board, bet, positions, private claim, feed settlement, pool actions | done, 63 tests green under vitest |
+| App: board, market pages, bets, positions, private claims, charts, feed settlement, pool actions | done, 69 tests green under vitest |
 | Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
 | Declared and deployed | not yet, on either network |
 | Three mainnet pool transactions | not yet |

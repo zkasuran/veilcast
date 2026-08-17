@@ -34,7 +34,8 @@ export function resolverContract(address: string, provider?: ProviderInterface):
     return new Contract({ abi: ABI, address, providerOrAccount: provider });
 }
 
-/// Opens a market bound to a feed, with this resolver holding the resolver role.
+/// Opens a market bound to a feed, with this resolver holding the resolver role. `feeBps` is the
+/// opener's cut, and the opener is the recipient: this contract could not collect a fee itself.
 export function openPriceMarketCall(
     address: string,
     question: string,
@@ -43,7 +44,8 @@ export function openPriceMarketCall(
     closeAt: number,
     category: string,
     ticker: string,
-    threshold: bigint
+    threshold: bigint,
+    feeBps = 0
 ): Call {
     return resolverContract(address).populate("open_price_market", [
         question,
@@ -53,6 +55,7 @@ export function openPriceMarketCall(
         encodeCategory(category),
         shortString.encodeShortString(ticker),
         threshold,
+        feeBps,
     ]);
 }
 

@@ -65,6 +65,11 @@ export default function MarketCard({
                 <span className={styles.tag}>
                     {view.labels.length === 2 ? "binary" : `${view.labels.length} outcomes`}
                 </span>
+                {view.feeBps > 0 ? (
+                    <span className={styles.tag}>{view.feeBps / 100}% fee</span>
+                ) : (
+                    <span className={styles.tag}>no fee</span>
+                )}
             </div>
 
             <div className={styles.outcomes}>
@@ -98,7 +103,7 @@ export default function MarketCard({
                             <span className={styles.outcomeFoot}>
                                 {formatStrk(volume)} STRK
                                 {view.state === "Open"
-                                    ? ` · pays ${payoutMultiple(volume, view.pot, ONE_STRK).toFixed(2)}x`
+                                    ? ` · pays ${payoutMultiple(volume, view.pot, ONE_STRK, view.feeBps).toFixed(2)}x`
                                     : won
                                     ? " · winner"
                                     : ""}

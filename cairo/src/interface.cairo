@@ -105,8 +105,17 @@ pub struct Market {
     pub state: MarketState,
     /// Meaningful only in state `Resolved`.
     pub winning_outcome: u8,
-    /// Total staked across every outcome. The whole pot goes to the winning outcome's positions.
+    /// Total staked across every outcome. This is the gross figure, before any fee.
     pub pot: u128,
+    /// The opener's cut of the pot at settlement, in basis points, capped at `MAX_FEE_BPS`. Fixed
+    /// when the market is opened and visible on the board from that moment, because a fee nobody
+    /// could see before betting would be a bait and switch.
+    pub fee_bps: u16,
+    /// Who that cut is paid to. Zero when the fee is zero.
+    pub fee_recipient: ContractAddress,
+    /// The fee this market owes, set when it resolves and cleared when it is collected. A void
+    /// market never sets it: nothing happened, so nothing is charged.
+    pub fee_owed: u128,
 }
 
 /// A whole market in one read: its state, its question, its labels and its live volumes.
@@ -129,6 +138,9 @@ pub trait IVeilcastMarket<TState> {
     ///
     /// `category` is a short string a board groups by, and it is the opener's word rather than
     /// anything the contract checks. Zero is allowed and means uncategorised.
+    ///
+    /// `fee_bps` is the opener's cut of the pot at settlement, capped at `MAX_FEE_BPS` and paid to
+    /// `fee_recipient`. Zero means no fee, and then the recipient is ignored.
     fn create_market(
         ref self: TState,
         question: ByteArray,
@@ -136,7 +148,13 @@ pub trait IVeilcastMarket<TState> {
         resolver: ContractAddress,
         close_at: u64,
         category: felt252,
+        fee_bps: u16,
+        fee_recipient: ContractAddress,
     ) -> u64;
+
+    /// Pays a resolved market's fee to the address it was opened with. Callable by anyone, because
+    /// the destination was fixed when the market opened and the caller only pays the gas.
+    fn collect_fee(ref self: TState, market_id: u64);
 
     /// Settles `market_id` on `winning_outcome`. Resolver only, and only once the market has
     /// closed. A winning outcome nobody backed voids the market instead of stranding the pot.
@@ -181,6 +199,9 @@ pub mod errors {
     pub const ZERO_AMOUNT: felt252 = 'ZERO_AMOUNT';
     pub const ZERO_POSITION_KEY: felt252 = 'ZERO_POSITION_KEY';
     pub const ZERO_RECIPIENT: felt252 = 'ZERO_RECIPIENT';
+    pub const ZERO_FEE_RECIPIENT: felt252 = 'ZERO_FEE_RECIPIENT';
+    pub const FEE_TOO_HIGH: felt252 = 'FEE_TOO_HIGH';
+    pub const NO_FEE_OWED: felt252 = 'NO_FEE_OWED';
     pub const NO_MARKET: felt252 = 'NO_MARKET';
     pub const TOO_FEW_OUTCOMES: felt252 = 'TOO_FEW_OUTCOMES';
     pub const TOO_MANY_OUTCOMES: felt252 = 'TOO_MANY_OUTCOMES';

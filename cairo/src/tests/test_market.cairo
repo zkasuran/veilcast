@@ -9,7 +9,7 @@ use veilcast::interface::{
     BetInput, ClaimInput, IVeilcastMarketDispatcherTrait, IVeilcastMarketSafeDispatcher,
     IVeilcastMarketSafeDispatcherTrait, MarketAction, MarketState, PayoutTarget, errors,
 };
-use veilcast::market::{VOID_GRACE, claim_message_hash};
+use veilcast::market::{MAX_FEE_BPS, VOID_GRACE, claim_message_hash};
 use veilcast::test_utils_contracts::mock_erc20::IMockErc20DispatcherTrait;
 use veilcast::test_utils_contracts::mock_pool::IMockPoolDispatcherTrait;
 use veilcast::tests::test_utils::{
@@ -70,27 +70,23 @@ fn test_create_market_rejects_bad_input() {
     let veilcast = deploy_veilcast();
     let market = safe_market(@veilcast);
     let resolver = resolver_address();
+    let create = |
+        outcome_labels: Array<ByteArray>, close_at: u64, fee_bps: u16, fee_recipient,
+    | market
+        .create_market(
+            question: "Q",
+            :outcome_labels,
+            :resolver,
+            :close_at,
+            category: 'Crypto',
+            :fee_bps,
+            :fee_recipient,
+        );
+    let no_fee: ContractAddress = Zero::zero();
 
+    assert_panic(create(array!["Only one"], CLOSE_AT, 0, no_fee), errors::TOO_FEW_OUTCOMES);
     assert_panic(
-        market
-            .create_market(
-                question: "Q",
-                outcome_labels: array!["Only one"],
-                :resolver,
-                close_at: CLOSE_AT,
-                category: 'Crypto',
-            ),
-        errors::TOO_FEW_OUTCOMES,
-    );
-    assert_panic(
-        market
-            .create_market(
-                question: "Q",
-                outcome_labels: array!["1", "2", "3", "4", "5", "6", "7", "8", "9"],
-                :resolver,
-                close_at: CLOSE_AT,
-                category: 'Crypto',
-            ),
+        create(array!["1", "2", "3", "4", "5", "6", "7", "8", "9"], CLOSE_AT, 0, no_fee),
         errors::TOO_MANY_OUTCOMES,
     );
     assert_panic(
@@ -101,21 +97,115 @@ fn test_create_market_rejects_bad_input() {
                 resolver: Zero::zero(),
                 close_at: CLOSE_AT,
                 category: 'Crypto',
+                fee_bps: 0,
+                fee_recipient: no_fee,
             ),
         errors::ZERO_RESOLVER,
     );
+    assert_panic(create(array!["Yes", "No"], 0, 0, no_fee), errors::CLOSE_IN_PAST);
+    // A fee above the cap, and a fee with nowhere to go.
     assert_panic(
-        market
-            .create_market(
-                question: "Q",
-                outcome_labels: array!["Yes", "No"],
-                :resolver,
-                close_at: 0,
-                category: 'Crypto',
-            ),
-        errors::CLOSE_IN_PAST,
+        create(array!["Yes", "No"], CLOSE_AT, MAX_FEE_BPS + 1, resolver), errors::FEE_TOO_HIGH,
     );
+    assert_panic(create(array!["Yes", "No"], CLOSE_AT, 100, no_fee), errors::ZERO_FEE_RECIPIENT);
     assert_eq!(veilcast.market.get_n_markets(), 0);
+}
+
+/// A fee is charged once, at settlement, on the gross pot. It is fixed when the market opens, so
+/// nobody bets without seeing it, and it comes out of what the winning side splits.
+#[test]
+#[feature("safe_dispatcher")]
+fn test_fee_is_charged_once_at_settlement() {
+    let veilcast = deploy_veilcast();
+    let creator: ContractAddress = 'CREATOR'.try_into().unwrap();
+    let market_id = veilcast
+        .create_market_with_fee(
+            resolver: resolver_address(), close_at: CLOSE_AT, fee_bps: 200, fee_recipient: creator,
+        );
+    let alice = new_coupon();
+    veilcast.bet(:market_id, outcome: 0, amount: 3 * ONE_STRK, position_key: alice.public_key);
+    veilcast.bet(:market_id, outcome: 1, amount: ONE_STRK, position_key: new_coupon().public_key);
+
+    let market = veilcast.market.get_market(market_id);
+    assert_eq!(market.fee_bps, 200);
+    assert_eq!(market.fee_recipient, creator);
+    // Nothing is owed until it settles.
+    assert_eq!(market.fee_owed, 0);
+    assert_panic(safe_market(@veilcast).collect_fee(market_id), errors::NO_FEE_OWED);
+
+    start_cheat_block_timestamp_global(CLOSE_AT);
+    start_cheat_caller_address(veilcast.market.contract_address, resolver_address());
+    veilcast.market.resolve(:market_id, winning_outcome: 0);
+    stop_cheat_caller_address(veilcast.market.contract_address);
+
+    // 2% of the 4 STRK pot, so 0.08 to the creator and 3.92 for the only winning coupon.
+    let fee = 80_000_000_000_000_000;
+    let payout = 3_920_000_000_000_000_000;
+    assert_eq!(veilcast.market.get_market(market_id).fee_owed, fee);
+    assert_eq!(veilcast.market.quote_payout(market_id, 0, 3 * ONE_STRK), payout);
+
+    veilcast.claim_to_note(:market_id, outcome: 0, coupon: alice, note_id: 'NOTE');
+    assert_eq!(veilcast.pool.get_note_amount('NOTE'), payout);
+    // The fee is all that is left, and it is still owed rather than paid.
+    assert_eq!(veilcast.market.get_total_escrow(), fee);
+
+    veilcast.market.collect_fee(market_id);
+    assert_eq!(veilcast.token.balance_of(creator), fee.into());
+    assert_eq!(veilcast.market.get_market(market_id).fee_owed, 0);
+    assert_eq!(veilcast.market.get_total_escrow(), 0);
+    assert_eq!(veilcast.token.balance_of(veilcast.market.contract_address), 0);
+    // And it cannot be collected twice.
+    assert_panic(safe_market(@veilcast).collect_fee(market_id), errors::NO_FEE_OWED);
+}
+
+/// A void market charges nothing. Nothing happened, so there is nothing to take a cut of, and every
+/// stake comes back whole.
+#[test]
+#[feature("safe_dispatcher")]
+fn test_a_void_market_charges_no_fee() {
+    let veilcast = deploy_veilcast();
+    let creator: ContractAddress = 'CREATOR'.try_into().unwrap();
+    let market_id = veilcast
+        .create_market_with_fee(
+            resolver: resolver_address(), close_at: CLOSE_AT, fee_bps: 500, fee_recipient: creator,
+        );
+    let alice = new_coupon();
+    veilcast.bet(:market_id, outcome: 0, amount: 3 * ONE_STRK, position_key: alice.public_key);
+
+    start_cheat_caller_address(veilcast.market.contract_address, resolver_address());
+    veilcast.market.void(market_id);
+    stop_cheat_caller_address(veilcast.market.contract_address);
+
+    assert_eq!(veilcast.market.get_market(market_id).fee_owed, 0);
+    assert_eq!(veilcast.market.quote_payout(market_id, 0, 3 * ONE_STRK), 3 * ONE_STRK);
+    veilcast.claim_to_note(:market_id, outcome: 0, coupon: alice, note_id: 'NOTE');
+    assert_eq!(veilcast.pool.get_note_amount('NOTE'), 3 * ONE_STRK);
+    assert_eq!(veilcast.market.get_total_escrow(), 0);
+    assert_panic(safe_market(@veilcast).collect_fee(market_id), errors::NO_FEE_OWED);
+}
+
+/// The live quote is what a bettor is shown before they bet, so it has to include the fee that
+/// settlement will charge rather than the gross pot.
+#[test]
+fn test_quote_payout_is_net_of_the_fee() {
+    let veilcast = deploy_veilcast();
+    let market_id = veilcast
+        .create_market_with_fee(
+            resolver: resolver_address(),
+            close_at: CLOSE_AT,
+            fee_bps: 500,
+            fee_recipient: resolver_address(),
+        );
+
+    // An empty book with a 5% fee: one STRK in, 0.95 out.
+    assert_eq!(veilcast.market.quote_payout(market_id, 0, ONE_STRK), 950_000_000_000_000_000);
+
+    veilcast
+        .bet(:market_id, outcome: 0, amount: 3 * ONE_STRK, position_key: new_coupon().public_key);
+    veilcast.bet(:market_id, outcome: 1, amount: ONE_STRK, position_key: new_coupon().public_key);
+
+    // 1 more on Yes: a 5 STRK pot less 5% is 4.75, split over 4 STRK of Yes stake, so 1.1875 back.
+    assert_eq!(veilcast.market.quote_payout(market_id, 0, ONE_STRK), 1_187_500_000_000_000_000);
 }
 
 #[test]

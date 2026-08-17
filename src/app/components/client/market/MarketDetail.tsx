@@ -7,6 +7,7 @@ import { num } from "starknet";
 import styles from "../../../uni.module.css";
 import { voyagerContractUrl } from "@/utils/constants";
 import { categoryLabel, marketStatus } from "@/utils/discovery";
+import { collectFeeCall } from "@/utils/market";
 import { formatStrk } from "@/utils/veilcast";
 import BetForm from "./BetForm";
 import ActivityFeed from "./ActivityFeed";
@@ -15,10 +16,11 @@ import MarketCard from "./MarketCard";
 import OddsChart from "./OddsChart";
 import PositionRow from "./PositionRow";
 import ResolverControls from "./ResolverControls";
+import ResultCard from "../strk20/ResultCard";
 import { useBoard } from "./useBoard";
 import { useMarketHistory } from "./useMarketHistory";
 import { usePositions } from "./usePositions";
-import { shortHex, useStrk20 } from "../strk20/useStrk20";
+import { type ActionResult, shortHex, useStrk20 } from "../strk20/useStrk20";
 
 /// One market, deep-linkable, which is what a market gets shared as.
 ///
@@ -35,6 +37,27 @@ export default function MarketDetail() {
     const positions = usePositions(id);
     const [outcome, setOutcome] = useState<number | undefined>();
     const [copied, setCopied] = useState(false);
+    const [feeBusy, setFeeBusy] = useState(false);
+    const [feeResult, setFeeResult] = useState<ActionResult | null>(null);
+
+    async function payFee() {
+        if (!view) return;
+        setFeeResult(null);
+        setFeeBusy(true);
+        try {
+            const txHash = await strk20.execute(
+                [collectFeeCall(strk20.marketAddress, view.id)],
+                setFeeResult,
+                `${formatStrk(view.feeOwed)} STRK fee`
+            );
+            if (txHash) {
+                void refresh();
+                void history.reload();
+            }
+        } finally {
+            setFeeBusy(false);
+        }
+    }
 
     const view = markets.find((market) => market.id === id);
     const history = useMarketHistory(id, view?.labels.length ?? 0);
@@ -186,6 +209,17 @@ export default function MarketDetail() {
                     <Fact label="Pot" value={`${formatStrk(view.pot)} STRK`} />
                     <Fact label="Staked per outcome" value={`${formatStrk(escrowed)} STRK`} />
                     <Fact
+                        label="Fee"
+                        value={
+                            view.feeBps === 0
+                                ? "none, the winning side splits the whole pot"
+                                : `${view.feeBps / 100}% of the pot, once, at settlement`
+                        }
+                    />
+                    {view.feeOwed > 0n ? (
+                        <Fact label="Fee owed" value={`${formatStrk(view.feeOwed)} STRK`} />
+                    ) : null}
+                    <Fact
                         label="Resolver"
                         value={shortHex(view.resolver)}
                         href={voyagerContractUrl(strk20.providerIndex, view.resolver)}
@@ -197,6 +231,27 @@ export default function MarketDetail() {
                     />
                 </div>
             </div>
+
+            {view.feeOwed > 0n ? (
+                <div className={styles.detailSection}>
+                    <h2 className={styles.detailHead}>Fee to pay out</h2>
+                    <div className={styles.notice}>
+                        This market settled owing {formatStrk(view.feeOwed)} STRK to the address it was
+                        opened with. Anyone can send that payment, the destination was fixed when the
+                        market opened, and the sender only pays the fee for the transaction.
+                    </div>
+                    <button
+                        className={`${styles.btn} ${styles.btnGreen} ${styles.btnBlock}`}
+                        disabled={feeBusy || !strk20.isConnected}
+                        onClick={() => void payFee()}
+                    >
+                        {feeBusy ? "Paying…" : `Pay the ${formatStrk(view.feeOwed)} STRK fee`}
+                    </button>
+                    {feeResult ? (
+                        <ResultCard result={feeResult} providerIndex={strk20.providerIndex} />
+                    ) : null}
+                </div>
+            ) : null}
 
             <div className={styles.detailSection}>
                 <h2 className={styles.detailHead}>What this page publishes</h2>

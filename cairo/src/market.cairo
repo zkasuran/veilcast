@@ -14,6 +14,10 @@ use starknet::ContractAddress;
 /// Bounds `create_market` and every loop over outcomes.
 pub const MAX_OUTCOMES: u8 = 8;
 
+/// Most a market may charge its bettors, in basis points: 5% of the pot, once, at settlement.
+/// A cap rather than a policy, so a market cannot be opened as a fee trap.
+pub const MAX_FEE_BPS: u16 = 500;
+
 /// How long after `close_at` anyone may void a market the resolver never settled (30 days).
 pub const VOID_GRACE: u64 = 2592000;
 
@@ -54,7 +58,7 @@ pub mod VeilcastMarket {
         BetInput, ClaimInput, IErc20Dispatcher, IErc20DispatcherTrait, IVeilcastMarket, Market,
         MarketAction, MarketState, MarketView, OpenNoteDeposit, PayoutTarget, errors,
     };
-    use super::{MAX_OUTCOMES, VOID_GRACE, claim_message_hash};
+    use super::{MAX_FEE_BPS, MAX_OUTCOMES, VOID_GRACE, claim_message_hash};
 
     #[storage]
     struct Storage {
@@ -82,6 +86,7 @@ pub mod VeilcastMarket {
         MarketResolved: MarketResolved,
         MarketVoided: MarketVoided,
         PayoutClaimed: PayoutClaimed,
+        FeeCollected: FeeCollected,
     }
 
     /// A market opened. `category` is a key so a board can subscribe to one section of the book.
@@ -94,6 +99,17 @@ pub mod VeilcastMarket {
         pub category: felt252,
         pub close_at: u64,
         pub n_outcomes: u8,
+        pub fee_bps: u16,
+    }
+
+    /// A resolved market's fee, paid to the address the market was opened with.
+    #[derive(Drop, starknet::Event)]
+    pub struct FeeCollected {
+        #[key]
+        pub market_id: u64,
+        #[key]
+        pub recipient: ContractAddress,
+        pub amount: u128,
     }
     /// The public half of a bet: how much went on which outcome, and the volume it lands in.
     /// Carries no address, because the market is never told one.
@@ -150,11 +166,18 @@ pub mod VeilcastMarket {
             resolver: ContractAddress,
             close_at: u64,
             category: felt252,
+            fee_bps: u16,
+            fee_recipient: ContractAddress,
         ) -> u64 {
             let n_labels = outcome_labels.len();
             assert(n_labels >= 2, errors::TOO_FEW_OUTCOMES);
             assert(n_labels <= MAX_OUTCOMES.into(), errors::TOO_MANY_OUTCOMES);
             assert(resolver.is_non_zero(), errors::ZERO_RESOLVER);
+            assert(fee_bps <= MAX_FEE_BPS, errors::FEE_TOO_HIGH);
+            // A fee with nowhere to go would strand tokens in here forever.
+            if fee_bps.is_non_zero() {
+                assert(fee_recipient.is_non_zero(), errors::ZERO_FEE_RECIPIENT);
+            }
             let created_at = get_block_timestamp();
             assert(close_at > created_at, errors::CLOSE_IN_PAST);
 
@@ -179,9 +202,19 @@ pub mod VeilcastMarket {
                         state: MarketState::Open,
                         winning_outcome: 0,
                         pot: 0,
+                        fee_bps,
+                        fee_recipient: if fee_bps.is_non_zero() {
+                            fee_recipient
+                        } else {
+                            Zero::zero()
+                        },
+                        fee_owed: 0,
                     },
                 );
-            self.emit(MarketCreated { market_id, resolver, category, close_at, n_outcomes });
+            self
+                .emit(
+                    MarketCreated { market_id, resolver, category, close_at, n_outcomes, fee_bps },
+                );
             market_id
         }
 
@@ -200,6 +233,9 @@ pub mod VeilcastMarket {
             }
             market.state = MarketState::Resolved;
             market.winning_outcome = winning_outcome;
+            // The fee is charged once, here, on the gross pot. Fixed when the market opened, so
+            // nobody bet without seeing it.
+            market.fee_owed = fee_on(pot: market.pot, fee_bps: market.fee_bps);
             self.markets.entry(market_id).write(market);
             self.emit(MarketResolved { market_id, winning_outcome, pot: market.pot });
         }
@@ -214,6 +250,20 @@ pub mod VeilcastMarket {
                 );
             }
             self.void_market(:market_id, ref :market);
+        }
+
+        fn collect_fee(ref self: ContractState, market_id: u64) {
+            let mut market = self.assert_market(market_id);
+            let fee = market.fee_owed;
+            assert(fee.is_non_zero(), errors::NO_FEE_OWED);
+
+            // Spend it before the transfer, so the fee is paid exactly once.
+            market.fee_owed = 0;
+            self.markets.entry(market_id).write(market);
+            self.total_escrow.write(self.total_escrow.read() - fee);
+            self.emit(FeeCollected { market_id, recipient: market.fee_recipient, amount: fee });
+            IErc20Dispatcher { contract_address: self.token.read() }
+                .transfer(recipient: market.fee_recipient, amount: fee.into());
         }
 
         fn privacy_invoke(ref self: ContractState, action: MarketAction) -> Span<OpenNoteDeposit> {
@@ -281,12 +331,16 @@ pub mod VeilcastMarket {
                 if outcome != market.winning_outcome {
                     return 0;
                 }
-                return payout_share(:stake, pot: market.pot, winning_volume: outcome_volume);
+                return payout_share(
+                    :stake, pot: market.pot - market.fee_owed, winning_volume: outcome_volume,
+                );
             }
-            // Still open, so quote as if this stake were placed now and this outcome then won.
+            // Still open, so quote as if this stake were placed now and this outcome then won,
+            // net of the fee that settlement would charge.
+            let gross = market.pot.saturating_add(stake);
             payout_share(
                 :stake,
-                pot: market.pot.saturating_add(stake),
+                pot: gross - fee_on(pot: gross, fee_bps: market.fee_bps),
                 winning_volume: outcome_volume.saturating_add(stake),
             )
         }
@@ -384,7 +438,7 @@ pub mod VeilcastMarket {
                 assert(outcome == market.winning_outcome, errors::LOSING_POSITION);
                 payout_share(
                     :stake,
-                    pot: market.pot,
+                    pot: market.pot - market.fee_owed,
                     winning_volume: self.outcome_volumes.entry((market_id, outcome)).read(),
                 )
             };
@@ -460,5 +514,15 @@ pub mod VeilcastMarket {
         }
         let share: u256 = stake.into() * pot.into() / winning_volume.into();
         share.try_into().expect(errors::PAYOUT_OVERFLOW)
+    }
+
+    /// `pot * fee_bps / 10000`, truncating, so the rounding dust stays with the bettors rather than
+    /// with the market's opener. Widened for the same reason `payout_share` is.
+    fn fee_on(pot: u128, fee_bps: u16) -> u128 {
+        if fee_bps.is_zero() {
+            return 0;
+        }
+        let fee: u256 = pot.into() * fee_bps.into() / 10000_u256;
+        fee.try_into().expect(errors::PAYOUT_OVERFLOW)
     }
 }

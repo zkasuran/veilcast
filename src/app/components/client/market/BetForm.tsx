@@ -3,7 +3,7 @@
 import { useState } from "react";
 import styles from "../../../uni.module.css";
 import { addrSTRK } from "@/utils/constants";
-import type { MarketView } from "@/utils/market";
+import { type MarketView, quotePayout } from "@/utils/market";
 import {
     betActions,
     formatStrk,
@@ -40,8 +40,8 @@ export default function BetForm({
     const stake = parseStrk(amount);
     const label = view.labels[outcome] ?? `outcome ${outcome}`;
     const volume = view.volumes[outcome] ?? 0n;
-    const multiple = stake === null ? 0 : payoutMultiple(volume, view.pot, stake);
-    const payout = stake === null ? 0n : (stake * (view.pot + stake)) / (volume + stake);
+    const multiple = stake === null ? 0 : payoutMultiple(volume, view.pot, stake, view.feeBps);
+    const payout = stake === null ? 0n : quotePayout(view, outcome, stake);
 
     async function placeBet() {
         if (stake === null || !strk20.hasMarket) return;
