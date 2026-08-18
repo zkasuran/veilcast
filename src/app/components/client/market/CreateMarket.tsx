@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import styles from "../../../uni.module.css";
+import { MAX_JURORS, openCommitteeMarketCall, parseJurors } from "@/utils/committee";
 import { CATEGORIES } from "@/utils/discovery";
 import { MAX_FEE_BPS, createMarketCall } from "@/utils/market";
 import { PAIRS, openPriceMarketCall, parseThreshold } from "@/utils/resolver";
@@ -9,10 +10,14 @@ import { MAX_OUTCOMES } from "@/utils/veilcast";
 import ResultCard from "../strk20/ResultCard";
 import { type ActionResult, useStrk20 } from "../strk20/useStrk20";
 
-/// Opens a market. Public and permissionless, and the opener becomes its resolver.
+/// How a market will be settled, which is the one real choice the opener makes.
 ///
-/// Unless it is bound to a price feed, in which case the Pragma adapter is the resolver and nobody,
-/// including whoever opened it, can settle it against what the feed says.
+/// "you" is the plain resolver: the opener settles it. "feed" binds it to Pragma and takes the
+/// decision away from everyone. "committee" hands it to a named jury. The last two are only offered
+/// when their contract is deployed on this network.
+type Mode = "you" | "feed" | "committee";
+
+/// Opens a market, by whichever settlement route the opener picks.
 export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
     const strk20 = useStrk20();
     const [open, setOpen] = useState(false);
@@ -20,9 +25,11 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
     const [labelText, setLabelText] = useState("Yes, No");
     const [hours, setHours] = useState("24");
     const [category, setCategory] = useState<string>(CATEGORIES[0]);
-    const [feed, setFeed] = useState(false);
+    const [mode, setMode] = useState<Mode>("you");
     const [ticker, setTicker] = useState<string>(PAIRS[0].ticker);
     const [thresholdText, setThresholdText] = useState("");
+    const [jurorText, setJurorText] = useState("");
+    const [quorumText, setQuorumText] = useState("2");
     const [feePercent, setFeePercent] = useState("0");
     const [result, setResult] = useState<ActionResult | null>(null);
     const [busy, setBusy] = useState(false);
@@ -31,10 +38,21 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
     const hoursOpen = Number(hours);
     const pair = PAIRS.find((candidate) => candidate.ticker === ticker) ?? PAIRS[0];
     const threshold = parseThreshold(thresholdText, pair.decimals);
-    const boundToFeed = feed && strk20.hasResolver;
     // A percent in the form, basis points on-chain. 5% is the contract's cap.
     const feeBps = Math.round(Number(feePercent) * 100);
     const feeOk = Number.isFinite(feeBps) && feeBps >= 0 && feeBps <= MAX_FEE_BPS;
+
+    const { jurors, invalid: badJurors } = parseJurors(jurorText);
+    const quorum = Math.round(Number(quorumText));
+    const feedReady = labels.length === 2 && threshold !== null;
+    const committeeReady =
+        jurors.length >= 1 &&
+        jurors.length <= MAX_JURORS &&
+        badJurors.length === 0 &&
+        Number.isInteger(quorum) &&
+        quorum >= 1 &&
+        quorum <= jurors.length;
+
     const ready =
         question.trim().length > 0 &&
         labels.length >= 2 &&
@@ -44,8 +62,8 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
         feeOk &&
         strk20.isConnected &&
         strk20.hasMarket &&
-        // A price question has exactly two sides: at or above the line, and below it.
-        (!boundToFeed || (labels.length === 2 && threshold !== null));
+        (mode !== "feed" || feedReady) &&
+        (mode !== "committee" || committeeReady);
 
     async function create() {
         if (!ready) return;
@@ -53,29 +71,7 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
         setBusy(true);
         try {
             const closeAt = Math.floor(Date.now() / 1000) + Math.round(hoursOpen * 3600);
-            const call =
-                boundToFeed && threshold !== null
-                    ? openPriceMarketCall(
-                        strk20.resolverAddress,
-                        question.trim(),
-                        labels[0],
-                        labels[1],
-                        closeAt,
-                        category,
-                        pair.ticker,
-                        threshold,
-                        feeBps
-                    )
-                    : createMarketCall(
-                        strk20.marketAddress,
-                        question.trim(),
-                        labels,
-                        strk20.address,
-                        closeAt,
-                        category,
-                        feeBps,
-                        strk20.address
-                    );
+            const call = buildCall(closeAt);
             const txHash = await strk20.execute([call], setResult, question.trim());
             if (txHash) {
                 setQuestion("");
@@ -84,6 +80,44 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
         } finally {
             setBusy(false);
         }
+    }
+
+    function buildCall(closeAt: number) {
+        if (mode === "feed" && threshold !== null) {
+            return openPriceMarketCall(
+                strk20.resolverAddress,
+                question.trim(),
+                labels[0],
+                labels[1],
+                closeAt,
+                category,
+                pair.ticker,
+                threshold,
+                feeBps
+            );
+        }
+        if (mode === "committee") {
+            return openCommitteeMarketCall(
+                strk20.committeeAddress,
+                question.trim(),
+                labels,
+                closeAt,
+                category,
+                feeBps,
+                jurors,
+                quorum
+            );
+        }
+        return createMarketCall(
+            strk20.marketAddress,
+            question.trim(),
+            labels,
+            strk20.address,
+            closeAt,
+            category,
+            feeBps,
+            strk20.address
+        );
     }
 
     if (!open) {
@@ -154,14 +188,19 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                 </div>
             ) : null}
 
-            {strk20.hasResolver ? (
-                <label className={styles.feedToggle}>
-                    <input type="checkbox" checked={feed} onChange={(event) => setFeed(event.target.checked)} />
-                    Settle from a Pragma price feed
-                </label>
-            ) : null}
+            <label className={styles.fieldLabel}>How it settles</label>
+            <select
+                className={styles.textInput}
+                value={mode}
+                onChange={(event) => setMode(event.target.value as Mode)}
+                aria-label="How the market settles"
+            >
+                <option value="you">You settle it (you are the resolver)</option>
+                {strk20.hasResolver ? <option value="feed">A Pragma price feed settles it</option> : null}
+                {strk20.hasCommittee ? <option value="committee">A jury settles it</option> : null}
+            </select>
 
-            {boundToFeed ? (
+            {mode === "feed" ? (
                 <div className={styles.feedFields}>
                     <select
                         className={styles.textInput}
@@ -186,30 +225,40 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
                 </div>
             ) : null}
 
+            {mode === "committee" ? (
+                <>
+                    <textarea
+                        className={styles.textArea}
+                        value={jurorText}
+                        onChange={(event) => setJurorText(event.target.value)}
+                        placeholder="Juror addresses, one per line"
+                        aria-label="Juror addresses"
+                        rows={3}
+                    />
+                    <input
+                        className={styles.textInput}
+                        value={quorumText}
+                        onChange={(event) => setQuorumText(event.target.value)}
+                        inputMode="numeric"
+                        placeholder="Votes needed to settle"
+                        aria-label="Quorum"
+                    />
+                    {badJurors.length > 0 ? (
+                        <div className={styles.warn}>Not a Starknet address: {badJurors.join(", ")}</div>
+                    ) : null}
+                    {jurors.length > 0 && !committeeReady && badJurors.length === 0 ? (
+                        <div className={styles.warn}>
+                            The quorum has to be between 1 and the {jurors.length} jurors.
+                        </div>
+                    ) : null}
+                </>
+            ) : null}
+
             <div className={styles.createNote}>
-                {boundToFeed ? (
-                    <>
-                        {labels[0] ?? "the first outcome"} wins if the {ticker} median is at or above{" "}
-                        {thresholdText || "the threshold"} when the market closes, otherwise{" "}
-                        {labels[1] ?? "the second"}. The feed decides it, anyone can send the
-                        settlement and nobody can settle it any other way.
-                    </>
-                ) : (
-                    <>
-                        {labels.length} outcomes, betting closes in {hours || "0"}h. You are the
-                        resolver: you settle it once it closes, or void it and every stake is
-                        refundable.
-                    </>
-                )}
-                {feeBps > 0 ? (
-                    <>
-                        {" "}
-                        Your fee is {feeBps / 100}% of the pot, charged once when the market settles,
-                        shown on the board from the moment it opens. A void market charges nothing.
-                    </>
-                ) : (
-                    " No fee: the winning side splits the whole pot."
-                )}
+                {settlementNote(mode, { labels, ticker, thresholdText, jurors: jurors.length, quorum })}
+                {feeBps > 0
+                    ? ` Your fee is ${feeBps / 100}% of the pot, charged once when the market settles, shown on the board from the moment it opens. A void market charges nothing.`
+                    : " No fee: the winning side splits the whole pot."}
             </div>
             <button className={styles.btnCta} disabled={!ready || busy} onClick={create}>
                 {busy ? "Submitting…" : "Open market"}
@@ -217,4 +266,23 @@ export default function CreateMarket({ onCreated }: { onCreated: () => void }) {
             {result ? <ResultCard result={result} providerIndex={strk20.providerIndex} /> : null}
         </div>
     );
+}
+
+function settlementNote(
+    mode: Mode,
+    { labels, ticker, thresholdText, jurors, quorum }: {
+        labels: string[];
+        ticker: string;
+        thresholdText: string;
+        jurors: number;
+        quorum: number;
+    }
+): string {
+    if (mode === "feed") {
+        return `${labels[0] ?? "the first outcome"} wins if the ${ticker} median is at or above ${thresholdText || "the threshold"} when the market closes, otherwise ${labels[1] ?? "the second"}. The feed decides it, anyone can send the settlement and nobody can settle it any other way.`;
+    }
+    if (mode === "committee") {
+        return `A jury of ${jurors || "your"} named jurors settles this, ${quorum} of them to agree. The jury and every vote are public. A panel that deadlocks cannot settle it, so it falls through to the 30-day public void.`;
+    }
+    return `${labels.length} outcomes. You are the resolver: you settle it once it closes, or void it and every stake is refundable.`;
 }

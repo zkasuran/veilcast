@@ -6,7 +6,10 @@
 //!
 //! `pragma_resolver` is an optional companion: a market names one resolver address, and pointing it
 //! at that contract settles a price question from a Pragma feed instead of from someone's judgment.
+//! `committee_resolver` is the other companion: for a question no feed can answer, it settles a
+//! market by a vote of named jurors rather than by one trusted address.
 
+pub mod committee_resolver;
 pub mod interface;
 pub mod market;
 pub mod pragma;

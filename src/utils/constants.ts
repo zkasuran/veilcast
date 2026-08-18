@@ -56,6 +56,21 @@ export function resolverForIndex(index: number): string {
     return "0x0";
 }
 
+// ─── Committee resolver ─────────────────────────────────────────────────────
+// Optional companion (cairo/src/committee_resolver.cairo). Deployed, it lets a market be settled by
+// a vote of named jurors, for questions no feed can answer. Absent, the app still works: markets are
+// then settled by a single named resolver or a price feed.
+
+export const veilcastCommitteeMainnet = process.env.NEXT_PUBLIC_VEILCAST_COMMITTEE_MAINNET ?? "0x0";
+export const veilcastCommitteeSepolia = process.env.NEXT_PUBLIC_VEILCAST_COMMITTEE_SEPOLIA ?? "0x0";
+
+/// The committee resolver for a frontend provider index, or "0x0" where it is not deployed.
+export function committeeForIndex(index: number): string {
+    if (index === 0) return veilcastCommitteeMainnet;
+    if (index === 2) return veilcastCommitteeSepolia;
+    return "0x0";
+}
+
 /// The market contract for a frontend provider index (0 = Mainnet, 2 = Sepolia),
 /// or "0x0" where it is not deployed.
 export function marketForIndex(index: number): string {

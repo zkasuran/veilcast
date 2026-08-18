@@ -40,6 +40,8 @@ jobs:
           NEXT_PUBLIC_VEILCAST_MARKET_SEPOLIA: ${{ vars.VEILCAST_MARKET_SEPOLIA }}
           NEXT_PUBLIC_VEILCAST_RESOLVER_MAINNET: ${{ vars.VEILCAST_RESOLVER_MAINNET }}
           NEXT_PUBLIC_VEILCAST_RESOLVER_SEPOLIA: ${{ vars.VEILCAST_RESOLVER_SEPOLIA }}
+          NEXT_PUBLIC_VEILCAST_COMMITTEE_MAINNET: ${{ vars.VEILCAST_COMMITTEE_MAINNET }}
+          NEXT_PUBLIC_VEILCAST_COMMITTEE_SEPOLIA: ${{ vars.VEILCAST_COMMITTEE_SEPOLIA }}
       # Pages would otherwise hide _next/ from Jekyll.
       - run: touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v3

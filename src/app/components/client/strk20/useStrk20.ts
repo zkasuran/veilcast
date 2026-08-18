@@ -87,6 +87,7 @@ export function useStrk20() {
     const provider = constants.myFrontendProviders[providerIndex];
     const marketAddress = constants.marketForIndex(providerIndex);
     const resolverAddress = constants.resolverForIndex(providerIndex);
+    const committeeAddress = constants.committeeForIndex(providerIndex);
 
     async function track(txHash: string, setResult: SetResult, amountLabel: string) {
         setResult({
@@ -165,6 +166,8 @@ export function useStrk20() {
         hasMarket: constants.isDeployedAt(marketAddress),
         resolverAddress,
         hasResolver: constants.isDeployedAt(resolverAddress),
+        committeeAddress,
+        hasCommittee: constants.isDeployedAt(committeeAddress),
         address,
         isConnected,
         walletAccount,

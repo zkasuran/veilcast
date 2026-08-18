@@ -11,6 +11,7 @@ import { collectFeeCall } from "@/utils/market";
 import { formatStrk } from "@/utils/veilcast";
 import BetForm from "./BetForm";
 import ActivityFeed from "./ActivityFeed";
+import CommitteeVote from "./CommitteeVote";
 import FeedSettle from "./FeedSettle";
 import MarketCard from "./MarketCard";
 import OddsChart from "./OddsChart";
@@ -75,6 +76,15 @@ export default function MarketDetail() {
         if (!view || !strk20.hasResolver) return false;
         try {
             return num.toBigInt(view.resolver) === num.toBigInt(strk20.resolverAddress);
+        } catch {
+            return false;
+        }
+    }
+
+    function isCommitteeBound(): boolean {
+        if (!view || !strk20.hasCommittee) return false;
+        try {
+            return num.toBigInt(view.resolver) === num.toBigInt(strk20.committeeAddress);
         } catch {
             return false;
         }
@@ -151,6 +161,7 @@ export default function MarketDetail() {
                 {isFeedBound() && view.state === "Open" ? (
                     <FeedSettle view={view} onSettled={refresh} />
                 ) : null}
+                {isCommitteeBound() ? <CommitteeVote view={view} onSettled={refresh} /> : null}
             </MarketCard>
 
             <div className={styles.detailSection}>

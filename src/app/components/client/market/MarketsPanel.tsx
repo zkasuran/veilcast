@@ -13,6 +13,7 @@ import {
 } from "@/utils/discovery";
 import type { MarketView } from "@/utils/market";
 import BetForm from "./BetForm";
+import CommitteeVote from "./CommitteeVote";
 import CreateMarket from "./CreateMarket";
 import FeedSettle from "./FeedSettle";
 import MarketCard from "./MarketCard";
@@ -44,6 +45,11 @@ export default function MarketsPanel() {
     /// feed panel instead of anybody's resolve button.
     function isFeedBound(view: MarketView): boolean {
         return strk20.hasResolver && sameAddress(view.resolver, strk20.resolverAddress);
+    }
+
+    /// A market whose resolver is the deployed committee contract is settled by its jury.
+    function isCommitteeBound(view: MarketView): boolean {
+        return strk20.hasCommittee && sameAddress(view.resolver, strk20.committeeAddress);
     }
 
     function sameAddress(left: string, right: string): boolean {
@@ -191,6 +197,7 @@ export default function MarketsPanel() {
                     {isFeedBound(view) && view.state === "Open" ? (
                         <FeedSettle view={view} onSettled={refresh} />
                     ) : null}
+                    {isCommitteeBound(view) ? <CommitteeVote view={view} onSettled={refresh} /> : null}
                 </MarketCard>
             ))}
         </div>

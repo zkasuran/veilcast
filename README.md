@@ -111,6 +111,14 @@ than the window it was deployed with, so a feed that has gone quiet cannot settl
 number. It cannot void either, because a permissionless void would let anyone cancel a live market,
 so a dead feed falls through to the market's own 30-day rule instead.
 
+**Everything else is settled by a jury.** `cairo/src/committee_resolver.cairo` is the resolver for
+questions no feed can answer. Opening a market through it names a fixed panel of jurors and a quorum.
+After the market closes, each juror casts one vote for an outcome or to void, and the first choice to
+reach the quorum settles the market in that transaction. There is no casting vote and no admin: a
+panel that deadlocks cannot settle anything, and the market falls through to the same 30-day public
+void. The jury and every vote are public, which is the same split the whole app runs on. The
+resolution is out in the open so it can be checked, and what stays private is who bet.
+
 The Pragma interface is declared in this repo rather than pulled in as an SDK, and checked against
 the live feeds: mainnet `0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b` answered
 `get_data_median(SpotEntry('STRK/USD'))` on 2026-08-16 with 12 publishers at 8 decimals. The app
@@ -147,9 +155,9 @@ address anywhere in it.
 
 | | |
 |---|---|
-| Cairo market contract | done, 27 tests green under Starknet Foundry |
-| Pragma resolver contract | done, covered by those tests against a mock feed |
-| App: board, market pages, bets, positions, private claims, charts, feed settlement, pool actions | done, 69 tests green under vitest |
+| Cairo market contract | done, 35 tests green under Starknet Foundry |
+| Resolvers: Pragma feed, and a juror committee | done, covered by those tests against mocks |
+| App: board, market pages, bets, positions, private claims, charts, feed and jury settlement | done, 77 tests green under vitest |
 | Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
 | Declared and deployed | not yet, on either network |
 | Three mainnet pool transactions | not yet |
@@ -164,12 +172,14 @@ final.
 cairo/src/market.cairo               the market: bets, volumes, resolution, claims
 cairo/src/interface.cairo            the ABI, the calldata layout, the error codes
 cairo/src/pragma_resolver.cairo      the feed resolver: bind a price question, settle it
+cairo/src/committee_resolver.cairo   the jury resolver: a named panel votes a market to settlement
 cairo/src/pragma.cairo               the slice of the Pragma oracle this repo calls
 cairo/src/tests/                     the contract's tests, including mocks of the pool and the feed
 cairo/scripts/deploy.sh              declare and deploy against a pool
 src/utils/veilcast.ts                coupons, claim signing, pool action lists, odds maths
 src/utils/market.ts                  board reads, payout maths, the public calls
 src/utils/resolver.ts                price questions, feed reads, settlement calls
+src/utils/committee.ts               juries: open, vote, read the panel and its tally
 src/utils/discovery.ts               sections, search, status, sorting
 src/utils/events.ts                  a market's history, read from its own events
 src/app/components/client/market/    board, market page, bet form, chart, activity, positions

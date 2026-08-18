@@ -682,7 +682,26 @@
 .resolverRow .btnGreen { border-color: #cdeede; color: var(--green); background: var(--green-soft); }
 .resolverNote { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
 
-/* A price market's binding and the median that will settle it. */
+/* A committee market's live tally, one row per choice. */
+.tallyRows { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.tallyRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13px;
+}
+.tallyLabel { flex: 1; color: #3b3b46; font-weight: 550; }
+.tallyCount {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.tallyRow .btn { background: var(--inset); color: #3b3b46; }
+.tallyRow .btnGreen { border-color: #cdeede; color: var(--green); background: var(--green-soft); }
 .feedRow {
   display: flex;
   align-items: baseline;
@@ -721,6 +740,30 @@
 }
 .feedFields { display: flex; gap: 8px; }
 .feedFields .textInput { flex: 1; }
+
+.fieldLabel {
+  display: block;
+  margin: 12px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.textArea {
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font-mono-ui), monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+.textArea:focus { border-color: var(--pink-soft-2); }
+.textArea::placeholder { color: var(--muted); font-family: var(--font-body), sans-serif; }
 
 .positionRow {
   margin-bottom: 12px;

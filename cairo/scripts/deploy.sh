@@ -57,6 +57,7 @@ echo "==> declare on $NETWORK"
 # A class that is already declared makes this fail; that is fine, take the hash from the error.
 sncast --account "$ACCOUNT" declare --contract-name VeilcastMarket --network "$NETWORK"
 sncast --account "$ACCOUNT" declare --contract-name PragmaResolver --network "$NETWORK"
+sncast --account "$ACCOUNT" declare --contract-name CommitteeResolver --network "$NETWORK"
 
 NETWORK_UPPER=$(echo "$NETWORK" | tr '[:lower:]' '[:upper:]')
 
@@ -74,6 +75,13 @@ Then, optionally, the Pragma resolver, bound to that market and to the feed:
       --class-hash <PragmaResolver class hash> \\
       --constructor-calldata <market address> $ORACLE $MAX_PRICE_AGE
 
-Record both in cairo/address.md, in strk20.json at the repo root and in .env.local as
-NEXT_PUBLIC_VEILCAST_MARKET_$NETWORK_UPPER and NEXT_PUBLIC_VEILCAST_RESOLVER_$NETWORK_UPPER.
+And, optionally, the committee resolver, bound to that market:
+
+  sncast --account $ACCOUNT deploy --network $NETWORK \\
+      --class-hash <CommitteeResolver class hash> \\
+      --constructor-calldata <market address>
+
+Record them in cairo/address.md, in strk20.json at the repo root and in .env.local as
+NEXT_PUBLIC_VEILCAST_MARKET_$NETWORK_UPPER, NEXT_PUBLIC_VEILCAST_RESOLVER_$NETWORK_UPPER and
+NEXT_PUBLIC_VEILCAST_COMMITTEE_$NETWORK_UPPER.
 EOF

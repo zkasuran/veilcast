@@ -46,3 +46,17 @@ max_price_age    : 3600 on mainnet. Sepolia needs a wide window or its stale fee
 ```
 
 The address goes in `.env.local` as `NEXT_PUBLIC_VEILCAST_RESOLVER_<NETWORK>`.
+
+## CommitteeResolver (`src/committee_resolver.cairo`)
+
+Optional. Deployed, it can hold the resolver role and settle a market by a vote of named jurors, for
+questions no feed can answer. Not declared yet.
+
+```
+class hash                 :
+contract address (sepolia) :
+contract address (mainnet) :
+```
+
+Constructor calldata is `(market)`: the one market it opens markets on. The address goes in
+`.env.local` as `NEXT_PUBLIC_VEILCAST_COMMITTEE_<NETWORK>`.
