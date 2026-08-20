@@ -13,6 +13,7 @@
     "@starknet-io/get-starknet-discovery": "6.0.2",
     "@starknet-io/get-starknet-wallet-standard": "6.0.2",
     "next": "^16.0.8",
+    "qrcode-generator": "2.0.4",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "sharp": "^0.34.5",

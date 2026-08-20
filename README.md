@@ -68,6 +68,24 @@ address binds the payout to that address, and signing for an open note is a bear
 good only for the transaction carrying it, because the wallet picks the note id while it assembles
 the transaction.
 
+### Moving and backing up a coupon
+
+Because the coupon is the whole position, the app treats it like cash. From the Positions tab you
+can:
+
+- **Back up** every coupon, either as plain JSON or encrypted behind a passphrase. The encryption is
+  AES-GCM with a PBKDF2-stretched key, done in the browser with WebCrypto, so the passphrase never
+  leaves the page and the file is useless without it.
+- **Move one** to another device or person as a bearer ticket: a short `veilcast:` string, and its
+  QR, that another browser imports to take the position. A ticket can be passphrase-locked too, for
+  a channel that is not private.
+- **Collect all** the winning and refundable positions in one pool transaction rather than one each.
+  The pool applies an action list, so a batch is one run of open notes followed by one run of
+  claims, each filling its own note.
+
+Restoring is one box that reads any of these back, plus a plain backup, and tells them apart before
+it asks for a passphrase.
+
 ### Payouts are parimutuel
 
 There is no counterparty to match and no order book. Every stake goes into one pot, and when the
@@ -157,7 +175,7 @@ address anywhere in it.
 |---|---|
 | Cairo market contract | done, 35 tests green under Starknet Foundry |
 | Resolvers: Pragma feed, and a juror committee | done, covered by those tests against mocks |
-| App: board, market pages, bets, positions, private claims, charts, feed and jury settlement | done, 77 tests green under vitest |
+| App: board, market pages, bets, positions, private claims, charts, feed and jury settlement | done, 86 tests green under vitest |
 | Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
 | Declared and deployed | not yet, on either network |
 | Three mainnet pool transactions | not yet |
@@ -180,6 +198,7 @@ src/utils/veilcast.ts                coupons, claim signing, pool action lists, 
 src/utils/market.ts                  board reads, payout maths, the public calls
 src/utils/resolver.ts                price questions, feed reads, settlement calls
 src/utils/committee.ts               juries: open, vote, read the panel and its tally
+src/utils/vault.ts                   encrypted coupon backups and bearer tickets
 src/utils/discovery.ts               sections, search, status, sorting
 src/utils/events.ts                  a market's history, read from its own events
 src/app/components/client/market/    board, market page, bet form, chart, activity, positions

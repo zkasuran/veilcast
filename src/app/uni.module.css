@@ -794,6 +794,29 @@
 .positionActions .btn { background: var(--inset); color: #3b3b46; }
 .positionNote { margin-top: 10px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
 
+/* --- The vault: backup, restore, bearer tickets ------------------------- */
+.vaultBox {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+}
+.vaultTabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.vaultPanel { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.lockRow { display: flex; gap: 8px; align-items: stretch; }
+.lockRow .textInput { flex: 1; margin-top: 0; }
+
+.shareBox {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  background: var(--inset);
+}
+.shareQr { display: flex; justify-content: center; margin: 6px 0 12px; }
+.shareActions { display: flex; gap: 8px; margin-top: 8px; }
+
 /* --- Board discovery: search, sections, sort ---------------------------- */
 .searchInput {
   flex: 1 1 260px;

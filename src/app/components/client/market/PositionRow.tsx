@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import styles from "../../../uni.module.css";
+import CouponShare from "./CouponShare";
 import { addrSTRK } from "@/utils/constants";
 import { type MarketView, type PositionStatus, positionStatus, settledPayout } from "@/utils/market";
 import {
@@ -47,6 +48,7 @@ export default function PositionRow({
     const strk20 = useStrk20();
     const [result, setResult] = useState<ActionResult | null>(null);
     const [busy, setBusy] = useState(false);
+    const [sharing, setSharing] = useState(false);
 
     const status = positionStatus(view, coupon.outcome, stake, Boolean(coupon.claimedTx));
     const pill = STATUS[status];
@@ -97,24 +99,31 @@ export default function PositionRow({
                 <span className={styles.subMono}>coupon {shortHex(coupon.positionKey)}</span>
             </div>
 
-            {claimable ? (
-                <div className={styles.positionActions}>
-                    <button
-                        className={`${styles.btn} ${styles.btnGreen}`}
-                        disabled={busy || !strk20.isConnected}
-                        onClick={() => claim("note")}
-                    >
-                        {busy ? "Collecting…" : "Collect privately"}
-                    </button>
-                    <button
-                        className={styles.btn}
-                        disabled={busy || !strk20.isConnected}
-                        onClick={() => claim("wallet")}
-                    >
-                        Collect to my wallet (public)
-                    </button>
-                </div>
-            ) : null}
+            <div className={styles.positionActions}>
+                {claimable ? (
+                    <>
+                        <button
+                            className={`${styles.btn} ${styles.btnGreen}`}
+                            disabled={busy || !strk20.isConnected}
+                            onClick={() => claim("note")}
+                        >
+                            {busy ? "Collecting…" : "Collect privately"}
+                        </button>
+                        <button
+                            className={styles.btn}
+                            disabled={busy || !strk20.isConnected}
+                            onClick={() => claim("wallet")}
+                        >
+                            Collect to my wallet (public)
+                        </button>
+                    </>
+                ) : null}
+                <button className={styles.btn} onClick={() => setSharing((open) => !open)}>
+                    {sharing ? "Close" : "Move or back up"}
+                </button>
+            </div>
+
+            {sharing ? <CouponShare coupon={coupon} onClose={() => setSharing(false)} /> : null}
 
             {status === "empty" ? (
                 <div className={styles.positionNote}>

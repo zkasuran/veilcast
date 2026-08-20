@@ -130,7 +130,14 @@ export function betCalldata(coupon: Coupon): string[] {
 /// name it. Signing a zero target is therefore a bearer authorization, good for whichever open
 /// note this transaction carries and nothing else afterwards, because the position is spent the
 /// moment the claim lands.
-export function claimIntoNoteCalldata(coupon: Coupon, marketAddress: string): string[] {
+///
+/// `noteIndex` is which open note in the transaction this claim fills, `0` for a lone claim. A batch
+/// creates one open note per claim, so claim `i` fills `${openNoteIds[i]}`.
+export function claimIntoNoteCalldata(
+    coupon: Coupon,
+    marketAddress: string,
+    noteIndex = 0
+): string[] {
     const signature = signClaim(coupon, marketAddress, "0x0");
     return [
         ACTION_CLAIM,
@@ -140,8 +147,13 @@ export function claimIntoNoteCalldata(coupon: Coupon, marketAddress: string): st
         signature.r,
         signature.s,
         TARGET_OPEN_NOTE,
-        FIRST_OPEN_NOTE,
+        openNotePlaceholder(noteIndex),
     ];
+}
+
+/// The wallet placeholder for the `n`th open note a transaction creates.
+export function openNotePlaceholder(index: number): string {
+    return index === 0 ? FIRST_OPEN_NOTE : `\${openNoteIds[${index}]}`;
 }
 
 /// Calldata for a claim paid to `recipient`: `[1, market_id, outcome, position_key, r, s, 1,
@@ -195,6 +207,33 @@ export function betActions(
     ];
 }
 
+/// The pool transaction that collects several payouts at once, each into its own private note.
+///
+/// It is a run of open-note transfers, one per coupon, then a run of claim invokes, one per coupon,
+/// each filling the note at its own index. The order matters twice over: every open note has to be
+/// created before the invoke that fills it, and each claim's `${openNoteIds[i]}` has to line up with
+/// the `i`th transfer. Collecting a whole settled board is then one signature and one pool proof
+/// rather than one per position.
+export function batchClaimIntoNotesActions(
+    token: string,
+    marketAddress: string,
+    coupons: Coupon[],
+    noteRecipient: string
+): WALLET_API.STRK20_ACTION[] {
+    const opens: WALLET_API.STRK20_ACTION[] = coupons.map(() => ({
+        type: "transfer",
+        token,
+        amount: "OPEN",
+        recipient: noteRecipient,
+    }));
+    const claims: WALLET_API.STRK20_ACTION[] = coupons.map((coupon, index) => ({
+        type: "invoke",
+        contract: marketAddress,
+        calldata: claimIntoNoteCalldata(coupon, marketAddress, index),
+    }));
+    return [...opens, ...claims];
+}
+
 /// The pool transaction that collects a payout as a private note: it creates an open note, then
 /// invokes the market to fill it.
 ///
@@ -207,14 +246,7 @@ export function claimIntoNoteActions(
     coupon: Coupon,
     noteRecipient: string
 ): WALLET_API.STRK20_ACTION[] {
-    return [
-        { type: "transfer", token, amount: "OPEN", recipient: noteRecipient },
-        {
-            type: "invoke",
-            contract: marketAddress,
-            calldata: claimIntoNoteCalldata(coupon, marketAddress),
-        },
-    ];
+    return batchClaimIntoNotesActions(token, marketAddress, [coupon], noteRecipient);
 }
 
 /// The pool transaction that collects a payout straight to a public address. The payout leaves the

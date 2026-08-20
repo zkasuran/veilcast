@@ -2,6 +2,7 @@ import { ec, num } from "starknet";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
     type Coupon,
+    batchClaimIntoNotesActions,
     betActions,
     betCalldata,
     claimIntoNoteActions,
@@ -16,6 +17,7 @@ import {
     importCoupons,
     loadCoupons,
     newCoupon,
+    openNotePlaceholder,
     parseStrk,
     payoutMultiple,
     saveCoupon,
@@ -122,7 +124,34 @@ describe("pool action lists", () => {
             { type: "invoke", contract: MARKET, calldata: claimToAddressCalldata(bet, MARKET, "0xabc") },
         ]);
     });
+
+    it("collects a batch as all the open notes first, then all the claims", () => {
+        const a = coupon({ marketId: 1, outcome: 0 });
+        const b = coupon({ marketId: 2, outcome: 1, privateKey: "0x5678", positionKey: ec.starkCurve.getStarkKey("0x5678") });
+        const actions = batchClaimIntoNotesActions(TOKEN, MARKET, [a, b], "0xdef");
+
+        // Two opens, then two invokes: every note exists before the invoke that fills it, which is
+        // what the pool requires.
+        expect(actions.map((action) => action.type)).toEqual(["transfer", "transfer", "invoke", "invoke"]);
+        expect(actions[0]).toEqual({ type: "transfer", token: TOKEN, amount: "OPEN", recipient: "0xdef" });
+        // Claim i fills note i, so the placeholders line up with the transfer order.
+        expect((actions[2] as { calldata: string[] }).calldata.at(-1)).toBe("${openNoteIds[0]}");
+        expect((actions[3] as { calldata: string[] }).calldata.at(-1)).toBe("${openNoteIds[1]}");
+        expect((actions[2] as { calldata: string[] }).calldata).toEqual(claimIntoNoteCalldata(a, MARKET, 0));
+        expect((actions[3] as { calldata: string[] }).calldata).toEqual(claimIntoNoteCalldata(b, MARKET, 1));
+    });
+
+    it("makes a lone claim the one-item case of a batch", () => {
+        const bet = coupon();
+        expect(claimIntoNoteActions(TOKEN, MARKET, bet, "0xdef")).toEqual(
+            batchClaimIntoNotesActions(TOKEN, MARKET, [bet], "0xdef")
+        );
+        expect(openNotePlaceholder(0)).toBe("${openNoteIds[0]}");
+        expect(openNotePlaceholder(3)).toBe("${openNoteIds[3]}");
+    });
 });
+// __T5__
+
 
 describe("amounts", () => {
     it("formats what a bettor recognises", () => {
