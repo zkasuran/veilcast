@@ -3,9 +3,10 @@
 import { useState } from "react";
 import styles from "../../../uni.module.css";
 import { addrSTRK } from "@/utils/constants";
+import { isClaimable, positionPnl } from "@/utils/portfolio";
 import type { Coupon } from "@/utils/veilcast";
 import { batchClaimIntoNotesActions, formatStrk, markCouponClaimed } from "@/utils/veilcast";
-import { settledPayout } from "@/utils/market";
+import PortfolioSummary from "./PortfolioSummary";
 import PositionRow from "./PositionRow";
 import VaultTools from "./VaultTools";
 import ResultCard from "../strk20/ResultCard";
@@ -31,34 +32,39 @@ export default function PositionsPanel() {
     }
 
     const ordered = [...positions.coupons].sort((left, right) => right.createdAt - left.createdAt);
+    const rows = ordered.map((coupon) =>
+        positionPnl(coupon, markets.find((market) => market.id === coupon.marketId), positions.stakeOf(coupon))
+    );
 
-    /// The coupons the chain will pay right now: a won position on a resolved market, or any position
-    /// on a void one, still holding a stake. These are what "collect all" sweeps.
-    const claimable = ordered.filter((coupon) => {
-        const view = markets.find((market) => market.id === coupon.marketId);
-        if (!view || positions.stakeOf(coupon) === 0n) return false;
-        return settledPayout(view, coupon.outcome, positions.stakeOf(coupon)) > 0n;
-    });
-    const claimableTotal = claimable.reduce((sum, coupon) => {
-        const view = markets.find((market) => market.id === coupon.marketId);
-        return sum + (view ? settledPayout(view, coupon.outcome, positions.stakeOf(coupon)) : 0n);
-    }, 0n);
+    // The coupons the chain will pay right now, and what they come to together.
+    const claimable = rows.filter(isClaimable);
+    const claimableCoupons = claimable.map((row) => row.coupon);
+    const claimableTotal = claimable.reduce((sum, row) => sum + row.value, 0n);
+
+    function downloadCsv(csv: string) {
+        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `veilcast-positions-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
 
     /// Collects every claimable coupon in one pool transaction, each into its own private note.
     async function collectAll() {
-        if (claimable.length === 0 || !strk20.hasMarket) return;
+        if (claimableCoupons.length === 0 || !strk20.hasMarket) return;
         setResult(null);
         setBusy(true);
         try {
             const actions = batchClaimIntoNotesActions(
                 addrSTRK,
                 strk20.marketAddress,
-                claimable,
+                claimableCoupons,
                 strk20.address
             );
             const txHash = await strk20.submit(actions, setResult, `${formatStrk(claimableTotal)} STRK`);
             if (txHash) {
-                for (const coupon of claimable) markCouponClaimed(coupon.positionKey, txHash);
+                for (const coupon of claimableCoupons) markCouponClaimed(coupon.positionKey, txHash);
                 reload();
             }
         } finally {
@@ -88,6 +94,7 @@ export default function PositionsPanel() {
                 ) : null}
             </div>
 
+            <PortfolioSummary rows={rows} onDownloadHref={downloadCsv} />
             <VaultTools count={positions.coupons.length} onChanged={reload} />
 
             {result ? <ResultCard result={result} providerIndex={strk20.providerIndex} /> : null}

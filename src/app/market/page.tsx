@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import styles from "../uni.module.css";
 import { Aurora, SiteFooter, SiteNav } from "../components/Chrome";
+import Onboarding from "../components/Onboarding";
 import MarketDetail from "../components/client/market/MarketDetail";
 
 export const metadata = {
@@ -22,6 +23,7 @@ export default function Page() {
                 </Suspense>
             </main>
             <SiteFooter />
+            <Onboarding />
         </div>
     );
 }

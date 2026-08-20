@@ -76,6 +76,13 @@ export function SiteFooter() {
                 STRK20
             </a>
             <span className={styles.footerDot}>·</span>
+            <button
+                className={styles.footerLink}
+                onClick={() => window.dispatchEvent(new Event("veilcast:show-intro"))}
+            >
+                How it works
+            </button>
+            <span className={styles.footerDot}>·</span>
             <span>Bets are anonymous, amounts are not. Read the README before you trust that.</span>
         </footer>
     );

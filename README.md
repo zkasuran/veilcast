@@ -86,6 +86,17 @@ can:
 Restoring is one box that reads any of these back, plus a plain backup, and tells them apart before
 it asks for a passphrase.
 
+### Your book
+
+The Positions tab is also a portfolio. It totals what you staked, what it is worth now, the net, and
+what is still riding on open markets, then surfaces the two things worth acting on: a payout ready to
+collect, and a position on a market closing soon. Open positions are valued at the current odds,
+which is a live quote and not a promise, and the summary says so. The whole book exports to CSV, in
+STRK and with the transaction hashes, carrying no key material beyond each position's public key.
+
+A first-run walkthrough explains the one thing that surprises people, the split between what is
+public and what is not, and it can be reopened any time from the footer.
+
 ### Payouts are parimutuel
 
 There is no counterparty to match and no order book. Every stake goes into one pot, and when the
@@ -175,7 +186,7 @@ address anywhere in it.
 |---|---|
 | Cairo market contract | done, 35 tests green under Starknet Foundry |
 | Resolvers: Pragma feed, and a juror committee | done, covered by those tests against mocks |
-| App: board, market pages, bets, positions, private claims, charts, feed and jury settlement | done, 86 tests green under vitest |
+| App: board, market pages, bets, positions, private claims, charts, feed and jury settlement | done, 94 tests green under vitest |
 | Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
 | Declared and deployed | not yet, on either network |
 | Three mainnet pool transactions | not yet |
@@ -199,6 +210,7 @@ src/utils/market.ts                  board reads, payout maths, the public calls
 src/utils/resolver.ts                price questions, feed reads, settlement calls
 src/utils/committee.ts               juries: open, vote, read the panel and its tally
 src/utils/vault.ts                   encrypted coupon backups and bearer tickets
+src/utils/portfolio.ts               per-position P&L, totals, closing-soon, CSV
 src/utils/discovery.ts               sections, search, status, sorting
 src/utils/events.ts                  a market's history, read from its own events
 src/app/components/client/market/    board, market page, bet form, chart, activity, positions

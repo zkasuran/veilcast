@@ -358,6 +358,75 @@
 .footer a { color: var(--pink-text); text-decoration: none; font-weight: 500; }
 .footer a:hover { text-decoration: underline; }
 .footerDot { color: #d8d8de; }
+.footerLink {
+  font-family: var(--font-body), sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pink-text);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.footerLink:hover { text-decoration: underline; }
+
+/* --- The portfolio summary: a KPI row, two alerts, a CSV button --------- */
+.portfolio {
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+}
+.statRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--inset);
+}
+.statLabel { color: var(--muted); font-size: 11.5px; font-weight: 600; letter-spacing: 0.01em; }
+.statValue { color: var(--ink); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.statHint { color: var(--muted); font-size: 10.5px; }
+.statUp { color: var(--green); }
+.statDown { color: var(--danger); }
+
+.alert {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--inset);
+  color: #3b3b46;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.alertGood { background: var(--green-soft); color: var(--green); font-weight: 550; }
+.portfolio .btn { margin-top: 10px; background: var(--inset); color: #3b3b46; }
+
+/* --- First-run walkthrough ---------------------------------------------- */
+.introModal {
+  width: min(440px, calc(100vw - 32px));
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px -18px rgba(13, 14, 14, 0.32);
+  padding: 24px;
+}
+.introDots { display: flex; gap: 6px; margin-bottom: 16px; }
+.introDot { width: 20px; height: 4px; border-radius: 999px; background: var(--inset-2); }
+.introDotOn { background: var(--pink); }
+.introTitle { margin: 0 0 8px; font-size: 21px; font-weight: 600; letter-spacing: -0.02em; }
+.introBody { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+.introActions { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; }
+.introActions .btn { background: var(--inset); color: #3b3b46; }
+.introActions .btnCta { width: auto; margin-top: 0; padding: 12px 28px; }
+/* __CSS_11__ */
 
 /* --- Tabbed action interface (Umbra-style) ------------------------------ */
 .panel { width: min(520px, calc(100vw - 32px)); margin: 0 auto; }
