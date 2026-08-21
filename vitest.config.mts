@@ -5,5 +5,5 @@ import { fileURLToPath } from "node:url";
 // tests need is mirrored here.
 export default defineConfig({
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-    test: { environment: "node", include: ["src/**/*.test.ts"] },
+    test: { environment: "node", include: ["src/**/*.test.ts", "sdk/src/**/*.test.ts"] },
 });

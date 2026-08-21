@@ -30,6 +30,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+      - run: npx tsc -p sdk/tsconfig.json
       - run: npm run build
         env:
           # A project page is served under the repository name.

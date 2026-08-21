@@ -1,0 +1,30 @@
+{
+  "name": "veilcast-sdk",
+  "version": "0.1.0",
+  "description": "Read and drive Veilcast, the private prediction market on Starknet's STRK20 pool, from any TypeScript app or bot.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "keywords": ["starknet", "strk20", "privacy", "prediction-market", "veilcast", "cairo"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zkasuran/veilcast",
+    "directory": "sdk"
+  },
+  "peerDependencies": {
+    "starknet": ">=10 <11"
+  }
+}

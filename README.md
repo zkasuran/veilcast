@@ -97,6 +97,16 @@ STRK and with the transaction hashes, carrying no key material beyond each posit
 A first-run walkthrough explains the one thing that surprises people, the split between what is
 public and what is not, and it can be reopened any time from the footer.
 
+### An SDK other teams can build on
+
+`sdk/` is `veilcast-sdk`, a framework-free TypeScript package that reads and drives Veilcast from any
+app or bot: the ABIs, the coupon and claim signing, the pool action lists a bet and a claim run on,
+the market and resolver calls, and the read helpers for the board, a market's events and the feed.
+It depends only on starknet.js, works in Node and the browser, and ships an example that prints a
+deployment's board read-only. Its calldata and payout math are pinned to the same fixed vectors the
+contract and the app assert, so the three cannot drift apart without a test failing. This is the
+piece another sprint team can depend on.
+
 ### Payouts are parimutuel
 
 There is no counterparty to match and no order book. Every stake goes into one pot, and when the
@@ -215,6 +225,7 @@ src/utils/discovery.ts               sections, search, status, sorting
 src/utils/events.ts                  a market's history, read from its own events
 src/app/components/client/market/    board, market page, bet form, chart, activity, positions
 src/app/components/client/strk20/    the pool actions and the shared submit path
+sdk/                                 veilcast-sdk: read and drive Veilcast from any TS app or bot
 strk20.json                          what the sprint hub reads
 ```
 
