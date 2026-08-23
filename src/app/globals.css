@@ -1,3 +1,8 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   VeilCast — Global Theme System
+   Light / Dark mode via [data-theme] on <html>.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
   --max-width: 1100px;
   --border-radius: 12px;
@@ -5,72 +10,79 @@
     'Roboto Mono', 'Oxygen Mono', 'Ubuntu Monospace', 'Source Code Pro',
     'Fira Mono', 'Droid Sans Mono', 'Courier New', monospace;
 
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  /* ─── Light palette (default) ─────────────────────────────────────── */
+  --ink: #0d0e0e;
+  --ink-secondary: #3b3b46;
+  --muted: #7d7d8a;
+  --bg: #ffffff;
+  --bg-page: #fbf7fd;
+  --card: #ffffff;
+  --card-elevated: #ffffff;
+  --line: #eaeaef;
+  --line-subtle: rgba(0, 0, 0, 0.06);
+  --inset: #f5f5f7;
+  --inset-2: #ededf1;
+  --pink: #e56b43;
+  --pink-soft: #fdefe9;
+  --pink-soft-2: #f9ddd1;
+  --pink-text: #b0491f;
+  --green: #0e9f6e;
+  --green-soft: #e7f7ef;
+  --danger: #e5484d;
+  --danger-soft: #fdeceb;
+  --danger-border: #f4cccb;
+  --green-border: #cdeede;
+  --chart-grid: #e1e0d9;
+  --chart-tick: #898781;
+  --chart-label: #52514e;
+  --chart-crosshair: #c3c2b7;
+  --placeholder: #c9c9d2;
+  --overlay: rgba(13, 14, 14, 0.32);
+  --shadow: rgba(13, 14, 14, 0.45);
+  --shadow-modal: rgba(13, 14, 14, 0.32);
+  --receipt-note-bg: rgba(0, 0, 0, 0.04);
+  --receipt-note-color: #24242c;
+  --footer-dot: #d8d8de;
 
-  --primary-glow: conic-gradient(
-    from 180deg at 50% 50%,
-    #16abff33 0deg,
-    #0885ff33 55deg,
-    #54d6ff33 120deg,
-    #0071ff33 160deg,
-    transparent 360deg
-  );
-  --secondary-glow: radial-gradient(
-    rgba(255, 255, 255, 1),
-    rgba(255, 255, 255, 0)
-  );
-
-  --tile-start-rgb: 239, 245, 249;
-  --tile-end-rgb: 228, 232, 233;
-  --tile-border: conic-gradient(
-    #00000080,
-    #00000040,
-    #00000030,
-    #00000020,
-    #00000010,
-    #00000010,
-    #00000080
-  );
-
-  --callout-rgb: 238, 240, 241;
-  --callout-border-rgb: 172, 175, 176;
-  --card-rgb: 180, 185, 188;
-  --card-border-rgb: 131, 134, 135;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+/* ─── Dark palette ────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --ink: #f0f0f4;
+  --ink-secondary: #c8c8d4;
+  --muted: #9a9aaa;
+  --bg: #0f1012;
+  --bg-page: #0a0b0d;
+  --card: #1a1b1f;
+  --card-elevated: #222328;
+  --line: #2a2b32;
+  --line-subtle: rgba(255, 255, 255, 0.06);
+  --inset: #16171b;
+  --inset-2: #1e1f24;
+  --pink: #f07a55;
+  --pink-soft: #2a1810;
+  --pink-soft-2: #3d2218;
+  --pink-text: #f5945e;
+  --green: #34d399;
+  --green-soft: #0d2618;
+  --danger: #f87171;
+  --danger-soft: #2a1414;
+  --danger-border: #5c2020;
+  --green-border: #1a4030;
+  --chart-grid: #2a2b32;
+  --chart-tick: #8a8a96;
+  --chart-label: #b0b0bc;
+  --chart-crosshair: #3a3b42;
+  --placeholder: #4a4a56;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow: rgba(0, 0, 0, 0.7);
+  --shadow-modal: rgba(0, 0, 0, 0.6);
+  --receipt-note-bg: rgba(255, 255, 255, 0.04);
+  --receipt-note-color: #d8d8e4;
+  --footer-dot: #3a3a44;
 
-    --primary-glow: radial-gradient(rgba(1, 65, 255, 0.4), rgba(1, 65, 255, 0));
-    --secondary-glow: linear-gradient(
-      to bottom right,
-      rgba(1, 65, 255, 0),
-      rgba(1, 65, 255, 0),
-      rgba(1, 65, 255, 0.3)
-    );
-
-    --tile-start-rgb: 2, 13, 46;
-    --tile-end-rgb: 2, 5, 19;
-    --tile-border: conic-gradient(
-      #ffffff80,
-      #ffffff40,
-      #ffffff30,
-      #ffffff20,
-      #ffffff10,
-      #ffffff10,
-      #ffffff80
-    );
-
-    --callout-rgb: 20, 20, 20;
-    --callout-border-rgb: 108, 108, 108;
-    --card-rgb: 100, 100, 100;
-    --card-border-rgb: 200, 200, 200;
-  }
+  color-scheme: dark;
 }
 
 * {
@@ -91,14 +103,10 @@ body {
   overflow-x: hidden;
 }
 
-/* Redesigned app is committed to a single light "aurora" theme. */
-html {
-  color-scheme: light;
-}
-
 body {
-  color: #0b0a14;
-  background: #fbf7fd;
+  color: var(--ink);
+  background: var(--bg-page);
+  transition: background 200ms ease, color 200ms ease;
 }
 
 a {
