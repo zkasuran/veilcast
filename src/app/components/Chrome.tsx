@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import styles from "../uni.module.css";
 import SelectWallet from "./client/WalletHandle/SelectWallet";
+import ThemeToggle from "./ThemeToggle";
 import { StrkCoin, BtcCoin, EthCoin, UsdcCoin, ZecCoin } from "./TokenIcons";
 
 // Files in public/ are not rewritten by basePath, so a project page has to prefix them by hand.
@@ -60,7 +61,10 @@ export function SiteNav() {
                     <img src={`${ASSETS}/tokens/strk20.png`} alt="STRK20" className={styles.brandImg} />
                 </span>
             </Link>
-            <SelectWallet variant="nav" />
+            <div className={styles.navRight}>
+                <ThemeToggle />
+                <SelectWallet variant="nav" />
+            </div>
         </nav>
     );
 }
