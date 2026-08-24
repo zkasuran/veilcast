@@ -18,6 +18,7 @@ import CreateMarket from "./CreateMarket";
 import FeedSettle from "./FeedSettle";
 import MarketCard from "./MarketCard";
 import ResolverControls from "./ResolverControls";
+import { BoardSkeleton } from "../../Skeleton";
 import { useBoard } from "./useBoard";
 import { useStrk20 } from "../strk20/useStrk20";
 
@@ -157,6 +158,10 @@ export default function MarketsPanel() {
             </div>
 
             {error ? <div className={styles.warn}>Could not read the board: {error}</div> : null}
+
+            {loading && markets.length === 0 ? (
+                <BoardSkeleton />
+            ) : null}
 
             {markets.length === 0 && !loading && !error ? (
                 <div className={styles.notice}>
