@@ -4,6 +4,7 @@ import { useState } from "react";
 import styles from "./uni.module.css";
 import { Aurora, SiteFooter, SiteNav } from "./components/Chrome";
 import Onboarding from "./components/Onboarding";
+import ToastContainer from "./components/Toast";
 import MarketsPanel from "./components/client/market/MarketsPanel";
 import PositionsPanel from "./components/client/market/PositionsPanel";
 import PoolPanel, { type PoolAction } from "./components/client/strk20/PoolPanel";
@@ -65,6 +66,7 @@ export default function Page() {
 
       <SiteFooter />
       <Onboarding />
+      <ToastContainer />
     </div>
   );
 }

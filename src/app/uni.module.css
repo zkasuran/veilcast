@@ -1195,3 +1195,269 @@
     transition: background 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Day 2: Micro-interactions, skeletons, toasts, entrance animations
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* --- Skeleton loading shimmer ------------------------------------------- */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--inset) 25%,
+    var(--inset-2) 50%,
+    var(--inset) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 8px;
+}
+.skeletonCard { pointer-events: none; }
+
+/* --- Staggered card entrance animation ---------------------------------- */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.marketCard {
+  animation: fadeSlideUp 0.4s ease-out both;
+}
+.marketCard:nth-child(1) { animation-delay: 0ms; }
+.marketCard:nth-child(2) { animation-delay: 60ms; }
+.marketCard:nth-child(3) { animation-delay: 120ms; }
+.marketCard:nth-child(4) { animation-delay: 180ms; }
+.marketCard:nth-child(5) { animation-delay: 240ms; }
+.marketCard:nth-child(6) { animation-delay: 300ms; }
+.marketCard:nth-child(7) { animation-delay: 360ms; }
+.marketCard:nth-child(8) { animation-delay: 420ms; }
+
+.skeletonCard { animation: none; opacity: 1; }
+
+/* --- Tab panel crossfade ------------------------------------------------ */
+@keyframes panelFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.panel,
+.panelWide {
+  animation: panelFadeIn 0.28s ease-out;
+}
+
+/* --- Hero gradient accent text ------------------------------------------ */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.heroAccent {
+  background: linear-gradient(
+    135deg,
+    var(--pink) 0%,
+    #f5945e 25%,
+    var(--pink) 50%,
+    #d44f1f 75%,
+    var(--pink) 100%
+  );
+  background-size: 300% 300%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientShift 6s ease-in-out infinite;
+}
+
+/* --- Enhanced button interactions --------------------------------------- */
+.btn {
+  box-shadow: 0 1px 3px -1px var(--shadow);
+}
+.btn:not(:disabled):hover {
+  box-shadow: 0 3px 8px -2px var(--shadow);
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: scale(0.97) translateY(0);
+  box-shadow: 0 1px 2px -1px var(--shadow);
+}
+
+.btnCta {
+  box-shadow: 0 4px 14px -4px var(--pink);
+}
+.btnCta:not(:disabled):hover {
+  box-shadow: 0 6px 20px -4px var(--pink);
+  transform: translateY(-1px);
+}
+.btnCta:active {
+  transform: scale(0.98) translateY(0);
+  box-shadow: 0 2px 8px -2px var(--pink);
+}
+
+.connectPill {
+  box-shadow: 0 2px 8px -3px var(--pink);
+}
+.connectPill:hover {
+  box-shadow: 0 4px 12px -3px var(--pink);
+  transform: translateY(-1px);
+}
+
+/* --- Toast notification system ------------------------------------------ */
+.toastContainer {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-width: min(380px, calc(100vw - 32px));
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--card-elevated);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px -8px var(--shadow);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  pointer-events: auto;
+  animation: toastSlideIn 0.28s ease-out;
+}
+
+.toastExit {
+  animation: toastSlideOut 0.28s ease-in forwards;
+}
+
+.toast_success { border-color: var(--green-border); }
+.toast_success .toastIcon { color: var(--green); }
+
+.toast_error { border-color: var(--danger-border); }
+.toast_error .toastIcon { color: var(--danger); }
+
+.toast_info { border-color: var(--pink-soft-2); }
+.toast_info .toastIcon { color: var(--pink); }
+
+.toastIcon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--inset);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.toastMessage { flex: 1; line-height: 1.4; }
+
+.toastDismiss {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--inset);
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 140ms, color 140ms;
+}
+.toastDismiss:hover { background: var(--inset-2); color: var(--ink); }
+
+/* --- Position row entrance ---------------------------------------------- */
+.positionRow {
+  animation: fadeSlideUp 0.35s ease-out both;
+}
+.positionRow:nth-child(1) { animation-delay: 0ms; }
+.positionRow:nth-child(2) { animation-delay: 50ms; }
+.positionRow:nth-child(3) { animation-delay: 100ms; }
+.positionRow:nth-child(4) { animation-delay: 150ms; }
+.positionRow:nth-child(5) { animation-delay: 200ms; }
+
+/* --- Outcome button hover glow ------------------------------------------ */
+.outcome:not(:disabled):hover {
+  box-shadow: 0 2px 12px -4px var(--pink);
+}
+.outcomeSelected {
+  box-shadow: 0 2px 16px -4px var(--pink);
+}
+
+/* --- Search input focus glow -------------------------------------------- */
+.searchInput:focus {
+  box-shadow: 0 0 0 3px var(--pink-soft);
+}
+.textInput:focus {
+  box-shadow: 0 0 0 3px var(--pink-soft);
+}
+
+/* --- Mobile toast positioning ------------------------------------------- */
+@media (max-width: 480px) {
+  .toastContainer {
+    bottom: 16px;
+    right: 16px;
+    left: 16px;
+    max-width: none;
+  }
+}
+
+/* --- Respect reduced motion for all animations -------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .marketCard,
+  .positionRow,
+  .panel,
+  .panelWide,
+  .toast,
+  .toastExit,
+  .heroAccent,
+  .skeleton {
+    animation: none !important;
+  }
+  .btn:not(:disabled):hover,
+  .btnCta:not(:disabled):hover,
+  .connectPill:hover {
+    transform: none;
+  }
+}

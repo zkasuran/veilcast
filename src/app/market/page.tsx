@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import styles from "../uni.module.css";
 import { Aurora, SiteFooter, SiteNav } from "../components/Chrome";
 import Onboarding from "../components/Onboarding";
+import { MarketDetailSkeleton } from "../components/Skeleton";
 import MarketDetail from "../components/client/market/MarketDetail";
 
 export const metadata = {
@@ -18,7 +19,7 @@ export default function Page() {
             <Aurora />
             <SiteNav />
             <main className={styles.detailMain}>
-                <Suspense fallback={<div className={styles.panelWide} />}>
+                <Suspense fallback={<MarketDetailSkeleton />}>
                     <MarketDetail />
                 </Suspense>
             </main>
