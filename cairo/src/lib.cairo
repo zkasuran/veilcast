@@ -11,9 +11,12 @@
 
 pub mod committee_resolver;
 pub mod interface;
+pub mod leverage_interface;
+pub mod leveraged_market;
 pub mod market;
 pub mod pragma;
 pub mod pragma_resolver;
+pub mod pricing;
 
 #[cfg(test)]
 mod test_utils_contracts;
