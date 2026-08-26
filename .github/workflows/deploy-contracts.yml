@@ -1,0 +1,317 @@
+name: Deploy contracts
+
+# Declare and deploy VeilCast contracts to Sepolia or Mainnet.
+#
+# This workflow is manually triggered. It needs secrets for the deployer account
+# and environment variables for the target network. It will:
+#   1. Build the Cairo contracts
+#   2. Declare the class hashes (idempotent - already-declared is not an error)
+#   3. Deploy VeilcastMarket, PragmaResolver, and CommitteeResolver
+#   4. Set GitHub repository variables so the Pages build picks up the addresses
+#   5. Update cairo/address.md and strk20.json in a commit
+#
+# Secrets required (set via Settings → Secrets):
+#   DEPLOYER_ADDRESS    - funded Starknet account address
+#   DEPLOYER_PRIVATE_KEY - its private key
+#   DEPLOYER_ACCOUNT_TYPE - oz, argent, or braavos
+#
+# For mainnet, also set:
+#   MAINNET_RPC_URL (optional, defaults to lava.build)
+#
+# Usage: Actions → Deploy contracts → Run workflow → pick network
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: "Target network"
+        required: true
+        type: choice
+        options:
+          - sepolia
+          - mainnet
+      pool_address:
+        description: "STRK20 pool address (required for Sepolia, has mainnet default)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-${{ inputs.network }}
+  cancel-in-progress: false
+
+env:
+  SCARB_VERSION: "2.20.0"
+  SNFOUNDRY_VERSION: "0.63.0"
+  TOKEN: "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d"
+  MAINNET_POOL: "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a"
+  MAINNET_ORACLE: "0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b"
+  SEPOLIA_ORACLE: "0x036031daa264c24520b11d93af622c848b2499b66b41d611bac95e13cfca131a"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cairo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: software-mansion/setup-scarb@v1
+        with:
+          scarb-version: ${{ env.SCARB_VERSION }}
+
+      - uses: foundry-rs/setup-snfoundry@v4
+        with:
+          starknet-foundry-version: ${{ env.SNFOUNDRY_VERSION }}
+
+      - name: Run tests
+        run: snforge test
+
+      - name: Build contracts
+        run: scarb build
+
+      - name: Configure deployer account
+        env:
+          DEPLOYER_ADDRESS: ${{ secrets.DEPLOYER_ADDRESS }}
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          DEPLOYER_ACCOUNT_TYPE: ${{ secrets.DEPLOYER_ACCOUNT_TYPE }}
+        run: |
+          sncast account import \
+            --name deployer \
+            --address "$DEPLOYER_ADDRESS" \
+            --private-key "$DEPLOYER_PRIVATE_KEY" \
+            --type "${DEPLOYER_ACCOUNT_TYPE:-oz}" \
+            --network ${{ inputs.network }}
+
+      - name: Resolve pool address
+        id: pool
+        run: |
+          NETWORK="${{ inputs.network }}"
+          if [ "$NETWORK" = "mainnet" ]; then
+            POOL="${{ inputs.pool_address || env.MAINNET_POOL }}"
+          else
+            POOL="${{ inputs.pool_address }}"
+            if [ -z "$POOL" ]; then
+              echo "::error::Pool address is required for Sepolia. Pass it as pool_address input."
+              exit 1
+            fi
+          fi
+          echo "address=$POOL" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve oracle and price age
+        id: oracle
+        run: |
+          NETWORK="${{ inputs.network }}"
+          if [ "$NETWORK" = "mainnet" ]; then
+            echo "address=${{ env.MAINNET_ORACLE }}" >> "$GITHUB_OUTPUT"
+            echo "max_age=3600" >> "$GITHUB_OUTPUT"
+          else
+            echo "address=${{ env.SEPOLIA_ORACLE }}" >> "$GITHUB_OUTPUT"
+            echo "max_age=31536000" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Declare VeilcastMarket
+        id: declare_market
+        run: |
+          OUTPUT=$(sncast --account deployer declare \
+            --contract-name VeilcastMarket \
+            --network ${{ inputs.network }} 2>&1) || true
+          # Extract class hash from output (success or already-declared)
+          HASH=$(echo "$OUTPUT" | grep -oP '0x[0-9a-fA-F]{60,}' | head -1)
+          if [ -z "$HASH" ]; then
+            echo "::error::Could not extract VeilcastMarket class hash"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "class_hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "VeilcastMarket class hash: $HASH"
+
+      - name: Declare PragmaResolver
+        id: declare_resolver
+        run: |
+          OUTPUT=$(sncast --account deployer declare \
+            --contract-name PragmaResolver \
+            --network ${{ inputs.network }} 2>&1) || true
+          HASH=$(echo "$OUTPUT" | grep -oP '0x[0-9a-fA-F]{60,}' | head -1)
+          if [ -z "$HASH" ]; then
+            echo "::error::Could not extract PragmaResolver class hash"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "class_hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "PragmaResolver class hash: $HASH"
+
+      - name: Declare CommitteeResolver
+        id: declare_committee
+        run: |
+          OUTPUT=$(sncast --account deployer declare \
+            --contract-name CommitteeResolver \
+            --network ${{ inputs.network }} 2>&1) || true
+          HASH=$(echo "$OUTPUT" | grep -oP '0x[0-9a-fA-F]{60,}' | head -1)
+          if [ -z "$HASH" ]; then
+            echo "::error::Could not extract CommitteeResolver class hash"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "class_hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "CommitteeResolver class hash: $HASH"
+
+      - name: Deploy VeilcastMarket
+        id: deploy_market
+        run: |
+          OUTPUT=$(sncast --account deployer deploy \
+            --network ${{ inputs.network }} \
+            --class-hash ${{ steps.declare_market.outputs.class_hash }} \
+            --constructor-calldata ${{ steps.pool.outputs.address }} ${{ env.TOKEN }})
+          ADDRESS=$(echo "$OUTPUT" | grep -oP '0x[0-9a-fA-F]{60,}' | head -1)
+          if [ -z "$ADDRESS" ]; then
+            echo "::error::Could not extract market contract address"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "address=$ADDRESS" >> "$GITHUB_OUTPUT"
+          echo "VeilcastMarket deployed at: $ADDRESS"
+
+      - name: Deploy PragmaResolver
+        id: deploy_resolver
+        run: |
+          MARKET="${{ steps.deploy_market.outputs.address }}"
+          OUTPUT=$(sncast --account deployer deploy \
+            --network ${{ inputs.network }} \
+            --class-hash ${{ steps.declare_resolver.outputs.class_hash }} \
+            --constructor-calldata $MARKET ${{ steps.oracle.outputs.address }} ${{ steps.oracle.outputs.max_age }})
+          ADDRESS=$(echo "$OUTPUT" | grep -oP '0x[0-9a-fA-F]{60,}' | head -1)
+          if [ -z "$ADDRESS" ]; then
+            echo "::error::Could not extract resolver contract address"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "address=$ADDRESS" >> "$GITHUB_OUTPUT"
+          echo "PragmaResolver deployed at: $ADDRESS"
+
+      - name: Deploy CommitteeResolver
+        id: deploy_committee
+        run: |
+          MARKET="${{ steps.deploy_market.outputs.address }}"
+          OUTPUT=$(sncast --account deployer deploy \
+            --network ${{ inputs.network }} \
+            --class-hash ${{ steps.declare_committee.outputs.class_hash }} \
+            --constructor-calldata $MARKET)
+          ADDRESS=$(echo "$OUTPUT" | grep -oP '0x[0-9a-fA-F]{60,}' | head -1)
+          if [ -z "$ADDRESS" ]; then
+            echo "::error::Could not extract committee resolver address"
+            echo "$OUTPUT"
+            exit 1
+          fi
+          echo "address=$ADDRESS" >> "$GITHUB_OUTPUT"
+          echo "CommitteeResolver deployed at: $ADDRESS"
+
+      - name: Set repository variables for Pages build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NETWORK_UPPER=$(echo "${{ inputs.network }}" | tr '[:lower:]' '[:upper:]')
+          cd ..
+          gh variable set "VEILCAST_MARKET_${NETWORK_UPPER}" \
+            --body "${{ steps.deploy_market.outputs.address }}"
+          gh variable set "VEILCAST_RESOLVER_${NETWORK_UPPER}" \
+            --body "${{ steps.deploy_resolver.outputs.address }}"
+          gh variable set "VEILCAST_COMMITTEE_${NETWORK_UPPER}" \
+            --body "${{ steps.deploy_committee.outputs.address }}"
+
+      - name: Update address.md and strk20.json
+        env:
+          DEPLOY_NETWORK: ${{ inputs.network }}
+          DEPLOY_MARKET: ${{ steps.deploy_market.outputs.address }}
+          DEPLOY_RESOLVER: ${{ steps.deploy_resolver.outputs.address }}
+          DEPLOY_COMMITTEE: ${{ steps.deploy_committee.outputs.address }}
+          DEPLOY_MARKET_CLASS: ${{ steps.declare_market.outputs.class_hash }}
+          DEPLOY_RESOLVER_CLASS: ${{ steps.declare_resolver.outputs.class_hash }}
+          DEPLOY_COMMITTEE_CLASS: ${{ steps.declare_committee.outputs.class_hash }}
+        run: |
+          cd ..
+
+          # Update strk20.json contracts array (uses env vars, not shell interpolation)
+          node -e "
+            const fs = require('fs');
+            const { DEPLOY_MARKET, DEPLOY_RESOLVER, DEPLOY_COMMITTEE } = process.env;
+            const manifest = JSON.parse(fs.readFileSync('strk20.json', 'utf8'));
+            const contracts = new Set(manifest.contracts || []);
+            contracts.add(DEPLOY_MARKET);
+            contracts.add(DEPLOY_RESOLVER);
+            contracts.add(DEPLOY_COMMITTEE);
+            manifest.contracts = [...contracts];
+            fs.writeFileSync('strk20.json', JSON.stringify(manifest, null, 2) + '\n');
+          "
+
+          # Update cairo/address.md with deployed addresses
+          cat > cairo/address.md << EOF
+          # Classes and addresses
+
+          Deployed via CI on $(date -u +%Y-%m-%dT%H:%M:%SZ).
+
+          ## VeilcastMarket
+
+          | | |
+          |---|---|
+          | class hash | \`$DEPLOY_MARKET_CLASS\` |
+          | contract address ($DEPLOY_NETWORK) | \`$DEPLOY_MARKET\` |
+
+          Constructor: \`(pool, token)\` — pool \`${{ steps.pool.outputs.address }}\`, token \`${{ env.TOKEN }}\`.
+
+          ## PragmaResolver
+
+          | | |
+          |---|---|
+          | class hash | \`$DEPLOY_RESOLVER_CLASS\` |
+          | contract address ($DEPLOY_NETWORK) | \`$DEPLOY_RESOLVER\` |
+
+          Constructor: \`(market, oracle, max_price_age)\` — market \`$DEPLOY_MARKET\`, oracle \`${{ steps.oracle.outputs.address }}\`, max_price_age \`${{ steps.oracle.outputs.max_age }}\`.
+
+          ## CommitteeResolver
+
+          | | |
+          |---|---|
+          | class hash | \`$DEPLOY_COMMITTEE_CLASS\` |
+          | contract address ($DEPLOY_NETWORK) | \`$DEPLOY_COMMITTEE\` |
+
+          Constructor: \`(market)\` — market \`$DEPLOY_MARKET\`.
+          EOF
+
+          echo "## Deployment Summary ($DEPLOY_NETWORK)"
+          echo ""
+          echo "| Contract | Class Hash | Address |"
+          echo "|----------|-----------|---------|"
+          echo "| VeilcastMarket | \`$DEPLOY_MARKET_CLASS\` | \`$DEPLOY_MARKET\` |"
+          echo "| PragmaResolver | \`$DEPLOY_RESOLVER_CLASS\` | \`$DEPLOY_RESOLVER\` |"
+          echo "| CommitteeResolver | \`$DEPLOY_COMMITTEE_CLASS\` | \`$DEPLOY_COMMITTEE\` |"
+
+      - name: Commit updated files
+        run: |
+          cd ..
+          git config user.name "veilcast-deployer[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add strk20.json cairo/address.md
+          if git diff --cached --quiet; then
+            echo "No file changes to commit"
+          else
+            git commit -m "deploy: contracts live on ${{ inputs.network }}"
+            git push
+          fi
+
+      - name: Summary
+        run: |
+          cd ..
+          echo "### ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Network:** ${{ inputs.network }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Contract | Address |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| VeilcastMarket | \`${{ steps.deploy_market.outputs.address }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| PragmaResolver | \`${{ steps.deploy_resolver.outputs.address }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| CommitteeResolver | \`${{ steps.deploy_committee.outputs.address }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The Pages workflow will pick up these addresses on the next push to main." >> $GITHUB_STEP_SUMMARY
