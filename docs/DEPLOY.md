@@ -41,8 +41,8 @@ Required secrets:
 For Sepolia you also need to pass the `pool_address` input (the STRK20 pool on Sepolia). For
 Mainnet the pool address defaults to the verified one from the sprint docs.
 
-The workflow declares, deploys, sets repo variables for the Pages build, and commits the addresses
-back to the repo. One click, everything wired.
+The workflow declares, deploys, sets repo variables for the Pages build, and commits the
+addresses back to `strk20.json` and `cairo/address.md`. One click, everything wired.
 
 ---
 

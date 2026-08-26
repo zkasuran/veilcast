@@ -222,36 +222,71 @@ jobs:
             --body "${{ steps.deploy_committee.outputs.address }}"
 
       - name: Update address.md and strk20.json
+        env:
+          DEPLOY_NETWORK: ${{ inputs.network }}
+          DEPLOY_MARKET: ${{ steps.deploy_market.outputs.address }}
+          DEPLOY_RESOLVER: ${{ steps.deploy_resolver.outputs.address }}
+          DEPLOY_COMMITTEE: ${{ steps.deploy_committee.outputs.address }}
+          DEPLOY_MARKET_CLASS: ${{ steps.declare_market.outputs.class_hash }}
+          DEPLOY_RESOLVER_CLASS: ${{ steps.declare_resolver.outputs.class_hash }}
+          DEPLOY_COMMITTEE_CLASS: ${{ steps.declare_committee.outputs.class_hash }}
         run: |
-          NETWORK="${{ inputs.network }}"
-          MARKET="${{ steps.deploy_market.outputs.address }}"
-          RESOLVER="${{ steps.deploy_resolver.outputs.address }}"
-          COMMITTEE="${{ steps.deploy_committee.outputs.address }}"
-          MARKET_CLASS="${{ steps.declare_market.outputs.class_hash }}"
-          RESOLVER_CLASS="${{ steps.declare_resolver.outputs.class_hash }}"
-          COMMITTEE_CLASS="${{ steps.declare_committee.outputs.class_hash }}"
-
           cd ..
 
-          # Update strk20.json contracts array
+          # Update strk20.json contracts array (uses env vars, not shell interpolation)
           node -e "
             const fs = require('fs');
+            const { DEPLOY_MARKET, DEPLOY_RESOLVER, DEPLOY_COMMITTEE } = process.env;
             const manifest = JSON.parse(fs.readFileSync('strk20.json', 'utf8'));
             const contracts = new Set(manifest.contracts || []);
-            contracts.add('$MARKET');
-            contracts.add('$RESOLVER');
-            contracts.add('$COMMITTEE');
+            contracts.add(DEPLOY_MARKET);
+            contracts.add(DEPLOY_RESOLVER);
+            contracts.add(DEPLOY_COMMITTEE);
             manifest.contracts = [...contracts];
             fs.writeFileSync('strk20.json', JSON.stringify(manifest, null, 2) + '\n');
           "
 
-          echo "## Deployment Summary ($NETWORK)"
+          # Update cairo/address.md with deployed addresses
+          cat > cairo/address.md << EOF
+          # Classes and addresses
+
+          Deployed via CI on $(date -u +%Y-%m-%dT%H:%M:%SZ).
+
+          ## VeilcastMarket
+
+          | | |
+          |---|---|
+          | class hash | \`$DEPLOY_MARKET_CLASS\` |
+          | contract address ($DEPLOY_NETWORK) | \`$DEPLOY_MARKET\` |
+
+          Constructor: \`(pool, token)\` — pool \`${{ steps.pool.outputs.address }}\`, token \`${{ env.TOKEN }}\`.
+
+          ## PragmaResolver
+
+          | | |
+          |---|---|
+          | class hash | \`$DEPLOY_RESOLVER_CLASS\` |
+          | contract address ($DEPLOY_NETWORK) | \`$DEPLOY_RESOLVER\` |
+
+          Constructor: \`(market, oracle, max_price_age)\` — market \`$DEPLOY_MARKET\`, oracle \`${{ steps.oracle.outputs.address }}\`, max_price_age \`${{ steps.oracle.outputs.max_age }}\`.
+
+          ## CommitteeResolver
+
+          | | |
+          |---|---|
+          | class hash | \`$DEPLOY_COMMITTEE_CLASS\` |
+          | contract address ($DEPLOY_NETWORK) | \`$DEPLOY_COMMITTEE\` |
+
+          Constructor: \`(market)\` — market \`$DEPLOY_MARKET\`.
+          EOF
+
+          echo "## Deployment Summary ($DEPLOY_NETWORK)"
           echo ""
           echo "| Contract | Class Hash | Address |"
           echo "|----------|-----------|---------|"
-          echo "| VeilcastMarket | \`$MARKET_CLASS\` | \`$MARKET\` |"
-          echo "| PragmaResolver | \`$RESOLVER_CLASS\` | \`$RESOLVER\` |"
-          echo "| CommitteeResolver | \`$COMMITTEE_CLASS\` | \`$COMMITTEE\` |"
+          echo "| VeilcastMarket | \`$DEPLOY_MARKET_CLASS\` | \`$DEPLOY_MARKET\` |"
+          echo "| PragmaResolver | \`$DEPLOY_RESOLVER_CLASS\` | \`$DEPLOY_RESOLVER\` |"
+          echo "| CommitteeResolver | \`$DEPLOY_COMMITTEE_CLASS\` | \`$DEPLOY_COMMITTEE\` |"
 
       - name: Commit updated files
         run: |
