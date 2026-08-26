@@ -13,6 +13,8 @@ interface FrontEndProviderState {
 }
 
 export const useFrontendProvider = create<FrontEndProviderState>()(set => ({
-    currentFrontendProviderIndex: 2,
+    // Default to Mainnet (index 0): that is where the market and both resolvers are deployed, so a
+    // first-time visitor with no wallet connected sees the live board rather than an empty Sepolia.
+    currentFrontendProviderIndex: 0,
     setCurrentFrontendProviderIndex: (currentFrontendProviderIndex: number) => { set(state => ({ currentFrontendProviderIndex })) }
 }));

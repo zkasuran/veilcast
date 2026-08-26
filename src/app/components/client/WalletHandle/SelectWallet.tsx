@@ -64,7 +64,7 @@ export default function SelectWallet({ variant = "ctaBig" }: { variant?: "nav" |
   async function handleSelectedWallet(selectedWallet: WalletWithStarknetFeatures) {
     setMyWallet(selectedWallet); // zustand
     console.log("Trying to connect wallet=", selectedWallet);
-    const myWA = await WalletAccountV6.connect(myFrontendProviders[2], selectedWallet);
+    const myWA = await WalletAccountV6.connect(myFrontendProviders[0], selectedWallet);
     setMyWalletAccount(myWA);
     console.log("WalletAccount created=", myWA);
     const result = await walletV6.requestAccounts(selectedWallet);
