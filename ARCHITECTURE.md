@@ -1,0 +1,414 @@
+# Architecture
+
+This document describes how Veilcast works at the system level: the contracts, the privacy
+boundaries, the data flow from bet to claim, and how the pieces connect. Read the
+[README](README.md) first for what and why; this is the how.
+
+---
+
+## System overview
+
+```mermaid
+graph TB
+    subgraph Browser["Browser (user's device)"]
+        App[Next.js App]
+        Coupons[(localStorage<br/>coupons)]
+        Wallet[Privacy Wallet<br/>Ready / Braavos]
+    end
+
+    subgraph Starknet["Starknet Mainnet"]
+        Pool[STRK20 Privacy Pool]
+        Market[VeilcastMarket]
+        Pragma[PragmaResolver]
+        Committee[CommitteeResolver]
+        Oracle[Pragma Oracle Feed]
+    end
+
+    Relayer[Pool Relayer<br/>rotating shared address]
+
+    App -->|read board, odds| Market
+    App -->|build action list| Wallet
+    Wallet -->|strk20InvokeTransaction| Pool
+    Pool -->|privacy_invoke| Market
+    Pool -->|submit via| Relayer
+    Relayer -->|on-chain tx| Starknet
+    Pragma -->|settle from feed| Oracle
+    Pragma -->|resolve| Market
+    Committee -->|vote + quorum| Market
+    App <-->|save/load| Coupons
+```
+
+---
+
+## Privacy boundary
+
+The single most important thing to understand is where the privacy line sits:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  PUBLIC (visible to everyone on-chain)                              │
+│                                                                     │
+│  • Deposits into the pool (address, token, amount)                  │
+│  • Each bet's amount and the outcome it backs                       │
+│  • Per-outcome volume (the odds)                                    │
+│  • Market questions, resolvers, settlements                         │
+│  • The on-chain sender of every private tx (a shared relayer)       │
+├─────────────────────────────────────────────────────────────────────┤
+│  PRIVATE (known only to the bettor's browser)                       │
+│                                                                     │
+│  • WHO placed a bet (the market never receives an address)          │
+│  • The link between two bets by one person                          │
+│  • The link between a winning position and the collecting wallet    │
+│  • Note-to-note transfers inside the pool                           │
+│  • The coupon private key (position ownership proof)                │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+The privacy comes from the STRK20 pool sitting between the user and the market. Every bet and claim
+is a pool action submitted by the pool's rotating relayer, so the user's address never touches the
+market contract.
+
+---
+
+## Contract architecture
+
+### VeilcastMarket (`cairo/src/market.cairo`)
+
+The core contract. Holds all markets, their volumes, and their positions. Bound to one pool and one
+token at construction (immutable).
+
+```
+Constructor: (pool: ContractAddress, token: ContractAddress)
+
+Storage:
+  next_market_id   : u64
+  markets          : Map<u64, Market>
+  questions        : Map<u64, ByteArray>
+  outcome_labels   : Map<(u64, u8), ByteArray>
+  outcome_volumes  : Map<(u64, u8), u128>
+  positions        : Map<(u64, u8, felt252), u128>   // (market_id, outcome, position_key) → stake
+  claimed          : Map<(u64, u8, felt252), bool>
+
+Key functions:
+  create_market(...)           → u64        // anyone can open a market
+  privacy_invoke(calldata)     → OpenNoteDeposit[]   // only callable by the pool
+  resolve(market_id, outcome)                // resolver only, after close
+  void(market_id)                            // resolver only, or anyone after 30d
+  collect_fee(market_id)                     // permissionless, pays the opener's fee
+  get_market_views(start, count) → MarketView[]     // the board in one call
+```
+
+### PragmaResolver (`cairo/src/pragma_resolver.cairo`)
+
+A resolver contract for price markets. No admin, no owner. Anyone can trigger settlement by
+pushing the oracle's median into the contract once the market has closed.
+
+```
+Constructor: (market: ContractAddress, oracle: ContractAddress, max_price_age: u64)
+
+Storage:
+  market_thresholds : Map<u64, u128>   // market_id → price threshold
+  market_pairs      : Map<u64, felt252> // market_id → Pragma pair id
+
+Key functions:
+  open_price_market(pair, threshold, ...)  → u64    // creates a market bound to a feed
+  settle(market_id)                                  // pushes median, resolves if at/above
+```
+
+### CommitteeResolver (`cairo/src/committee_resolver.cairo`)
+
+A resolver for questions no feed can answer. A fixed panel of jurors votes, and the first
+choice to reach quorum settles the market.
+
+```
+Constructor: (market: ContractAddress)
+
+Storage:
+  committees : Map<u64, Committee>   // market_id → {jurors, quorum, votes}
+
+Key functions:
+  open_committee_market(jurors, quorum, ...)  → u64  // creates a jury-settled market
+  vote(market_id, outcome_or_void)                   // juror only, one vote each
+```
+
+---
+
+## Data flow: placing a bet
+
+```mermaid
+sequenceDiagram
+    participant User as Browser
+    participant Wallet as Privacy Wallet
+    participant Pool as STRK20 Pool
+    participant Relayer as Pool Relayer
+    participant Market as VeilcastMarket
+
+    User->>User: Generate fresh Stark keypair (coupon)
+    User->>User: Save coupon to localStorage
+    User->>Wallet: strk20InvokeTransaction(actionList)
+    Note over Wallet: Action list:<br/>1. Withdraw stake from note<br/>2. Invoke market with BetInput
+
+    Wallet->>Pool: Submit action list
+    Pool->>Relayer: Route through rotating relayer
+    Relayer->>Market: privacy_invoke([0, market_id, outcome, amount, position_key])
+    Market->>Market: Record position(market_id, outcome, position_key) += amount
+    Market-->>Pool: Return [] (no open note deposits for a bet)
+    Market->>Market: Emit BetPlaced(market_id, outcome, amount, position_key, running_total)
+```
+
+**Key insight:** The market receives `position_key` (a fresh public key), never an address. The
+relayer's address is on the transaction, not the bettor's. Two bets by one person use different
+keys and cannot be linked on-chain.
+
+---
+
+## Data flow: claiming a payout
+
+```mermaid
+sequenceDiagram
+    participant User as Browser
+    participant Wallet as Privacy Wallet
+    participant Pool as STRK20 Pool
+    participant Market as VeilcastMarket
+
+    User->>User: Load coupon from localStorage
+    User->>User: Sign claim_message_hash with coupon.privateKey
+    User->>Wallet: strk20InvokeTransaction(actionList)
+    Note over Wallet: Action list:<br/>1. Open note (receives payout)<br/>2. Invoke market with ClaimInput
+
+    Wallet->>Pool: Submit action list
+    Pool->>Market: privacy_invoke([1, market_id, outcome, key, r, s, 0, note_id])
+    Market->>Market: Verify signature against position_key
+    Market->>Market: Calculate payout = stake * pot / winning_volume
+    Market->>Market: Transfer payout to pool
+    Market-->>Pool: Return [OpenNoteDeposit{note_id, token, amount}]
+    Pool->>Pool: Write payout into the new private note
+```
+
+**Key insight:** The payout lands in a fresh private note. The user can later unshield to any
+address, breaking the link between the bet and the withdrawal.
+
+---
+
+## Coupon system
+
+The coupon IS the position. There is no on-chain account, no registry, no lookup by address.
+
+```
+┌─────────────────────────────────────────┐
+│  Coupon (stored in browser localStorage) │
+├─────────────────────────────────────────┤
+│  marketId      : number                  │
+│  outcome       : number                  │
+│  privateKey    : string (Stark key)      │
+│  positionKey   : string (public half)    │
+│  amount        : string (wei)            │
+│  createdAt     : timestamp               │
+│  betTx?        : string                  │
+│  claimedTx?    : string                  │
+└─────────────────────────────────────────┘
+```
+
+**Backup formats:**
+- Plain JSON (array of coupons)
+- AES-GCM encrypted (PBKDF2-stretched passphrase, WebCrypto, browser-only)
+- Bearer ticket (`veilcast:<base64>` URI + QR code, optionally passphrase-locked)
+
+**Why this design:**
+1. No on-chain identity means no address to trace
+2. Fresh key per bet means no linkability between bets
+3. The claim signature covers the payout target, preventing relayer redirection
+4. Bearer transfer enables secondary markets for positions
+
+---
+
+## Parimutuel math
+
+Veilcast uses parimutuel (pool) betting, not a counterparty model:
+
+```
+payout = stake × pot / winning_volume
+```
+
+All stakes go into one pot. When the market resolves, the entire pot is split among the winning
+side in proportion to their stakes. The fee (if any) is deducted from the gross pot first.
+
+```typescript
+// Net payout calculation (what the contract computes)
+const grossPot = market.pot;
+const fee = (grossPot * BigInt(market.fee_bps)) / 10000n;
+const netPot = grossPot - fee;
+const payout = (stake * netPot) / winningVolume;
+
+// Quoted odds (what the app shows, including the user's own stake)
+const impliedOdds = (volumeForOutcome + myStake) / (pot + myStake);
+const quotedPayout = myStake * (pot + myStake) / (volumeForOutcome + myStake);
+```
+
+**Edge cases:**
+- Resolved on an outcome nobody backed → void (all stakes refundable)
+- Resolver goes silent → anyone can void after 30 days
+- Fee is charged at settlement, never during betting
+
+---
+
+## Resolution paths
+
+```mermaid
+flowchart TD
+    A[Market closes] --> B{Resolver type?}
+    B -->|Owner| C[resolver calls resolve]
+    B -->|Oracle| D[Anyone pushes Pragma median]
+    B -->|Jury| E[Jurors vote]
+
+    C --> F[Market settled]
+    D --> G{Price ≥ threshold?}
+    G -->|Yes| H[Outcome 0 wins]
+    G -->|No| I[Outcome 1 wins]
+    H --> F
+    I --> F
+    E --> J{Quorum reached?}
+    J -->|Yes| F
+    J -->|No, 30d passes| K[Anyone can void]
+    K --> L[All stakes refundable]
+
+    C -->|Silent 30d| K
+```
+
+---
+
+## Frontend architecture
+
+```
+src/app/
+├── layout.tsx                    Root layout (providers, chrome)
+├── page.tsx                      Home: board + positions tabs
+├── market/page.tsx               /market/?id=N detail page
+├── globals.css                   CSS custom properties (dark/light)
+├── uni.module.css                Shared component styles
+└── components/
+    ├── Chrome.tsx                Nav, footer, theme toggle slot
+    ├── ThemeToggle.tsx           Dark/light with localStorage persistence
+    ├── Onboarding.tsx            First-run privacy explainer
+    ├── Skeleton.tsx              Loading shimmer placeholders
+    ├── Toast.tsx                 Global toast notification system
+    └── client/
+        ├── provider/             Wallet + RPC providers (Zustand)
+        ├── strk20/               Shield, unshield, pool action submission
+        ├── WalletHandle/         Connect/disconnect button
+        └── market/
+            ├── MarketsPanel.tsx   Board grid with search/filter/sort
+            ├── MarketCard.tsx     One market's card (odds bars, state)
+            ├── MarketDetail.tsx   Full market page (chart, bet, positions)
+            ├── BetForm.tsx        Amount input, outcome picker, quote
+            ├── OddsChart.tsx      Historical odds from on-chain events
+            ├── ActivityFeed.tsx   Event log (amounts, no addresses)
+            ├── PositionsPanel.tsx All coupons, P&L, batch actions
+            ├── PositionRow.tsx    One position with claim/backup
+            ├── VaultTools.tsx     Backup/restore/transfer coupons
+            ├── CouponShare.tsx    Bearer ticket generation + QR
+            ├── CreateMarket.tsx   Market creation form
+            ├── ResolverControls.tsx Resolve/void buttons (resolver only)
+            ├── FeedSettle.tsx     Push Pragma median to settle
+            ├── CommitteeVote.tsx  Jury voting interface
+            ├── PortfolioSummary.tsx Totals, net P&L, CSV export
+            └── QrCode.tsx         QR code renderer (qrcode-generator)
+```
+
+**State management:** Zustand stores for wallet connection, current network, and provider instance.
+Coupons are stored in localStorage (never sent to a server). Board and market data are fetched
+directly from the RPC via starknet.js multicall.
+
+**Static export:** The app is built as `next export` — no server runtime. Every page is client-side
+rendered from on-chain data. This means infinite scaling, no backend to trust, and
+censorship-resistant hosting on GitHub Pages or IPFS.
+
+---
+
+## SDK design
+
+`sdk/` is a standalone TypeScript package with three layers:
+
+| Layer | Purpose | Example |
+|-------|---------|---------|
+| **Reads** | Fetch and decode on-chain state | `loadBoard()`, `loadMarketEvents()`, `oddsSeries()` |
+| **Actions** | Build STRK20 action lists for private operations | `betActions()`, `batchClaimIntoNotesActions()` |
+| **Calls** | Build `Call` objects for public operations | `createMarketCall()`, `resolveCall()`, `voteCall()` |
+
+The SDK depends only on `starknet` (peer, v10). It ships the contract ABIs, so consumers need
+no extra packages. The same payout math and claim-message-hash logic is tested against shared
+vectors with the Cairo contract and the app, ensuring all three implementations agree.
+
+---
+
+## Test strategy
+
+| Layer | Framework | Count | What's covered |
+|-------|-----------|-------|---------------|
+| Cairo contracts | snForge 0.63 | 35 | Full bet→resolve→claim path, edge cases, access control, fee math, resolvers, mocks of pool + oracle |
+| TypeScript utils | Vitest 4.1 | 105 | Calldata encoding, claim signature, parimutuel math, coupon vault (AES-GCM), board/market reads, event parsing, portfolio P&L, SDK |
+
+**Pinned vectors:** The claim message hash is computed identically in Cairo and TypeScript and
+asserted against the same hardcoded felt in both test suites. A drift in either side fails a test
+before any on-chain transaction can revert.
+
+---
+
+## CI/CD pipeline
+
+```mermaid
+flowchart LR
+    Push[Push to main] --> Tests[Run tests]
+    Tests --> Build[Next.js build]
+    Build --> Pages[Deploy to GitHub Pages]
+
+    PR[Pull request] --> CairoCI[Cairo fmt + build + snforge]
+
+    Dispatch[Manual dispatch] --> Deploy[Declare + Deploy contracts]
+    Deploy --> Variables[Set repo variables]
+    Variables --> Pages
+```
+
+Three workflows:
+1. **`pages.yml`** — on every push to main: test, typecheck, build, deploy to Pages
+2. **`contracts.yml`** — on Cairo changes: format check, build, snforge test
+3. **`deploy-contracts.yml`** — manual dispatch: declare + deploy to Sepolia or Mainnet
+
+---
+
+## Security considerations
+
+| Concern | Mitigation |
+|---------|-----------|
+| Coupon loss = payout loss | Backup/export in Positions tab, encrypted option |
+| Coupon theft = payout theft | AES-GCM encryption, passphrase-locked bearer tickets |
+| Relayer redirection | Claim signature covers payout target (address or note) |
+| Front-running bets | Bets are pool actions — only the relayer sees them, and it has no reason to front-run a parimutuel market (no counterparty to exploit) |
+| Stale oracle settling wrong | `max_price_age` constructor arg rejects old medians |
+| Resolver going silent | 30-day public void fallback, permissionless |
+| Fee traps | Fee is fixed at market creation, capped at 5%, shown on the board |
+| localStorage XSS | CSP headers, no inline scripts, no server-side data |
+
+---
+
+## Design decisions and tradeoffs
+
+| Decision | Why |
+|----------|-----|
+| Parimutuel over orderbook | No counterparty matching needed, works with any liquidity level, simple on-chain math |
+| Fresh key per bet | Unlinkability at the cost of per-bet key management (mitigated by batch backup) |
+| Static export over SSR | No server to trust, deploy anywhere, censorship-resistant |
+| Wallet API over raw signing | The wallet handles proving and private state — the app never sees a viewing key |
+| Amounts public | A market with hidden sizes cannot produce accurate odds — the product would be broken |
+| On-chain event history | No indexer needed, no off-chain infra to run, chart data is verifiable |
+| Board in one call | `get_market_views(start, count)` saves 4N RPC calls on page load |
+
+---
+
+## Future work
+
+- **Sub-account positions:** When STRK20 sub-accounts ship, positions could be held as sub-account state instead of browser localStorage
+- **Cross-chain bets:** Bridge integration to accept bets from EVM/Solana wallets via the privacy pool
+- **Automated market makers:** Seeded liquidity for new markets to bootstrap the price signal
+- **Resolution DAOs:** Decentralized resolution infrastructure for arbitrary questions
+- **Mobile app:** React Native with secure coupon storage in the device keychain

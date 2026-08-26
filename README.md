@@ -1,287 +1,288 @@
-# Veilcast
+<p align="center">
+  <img src="public/veilcast-logo.svg" alt="Veilcast" width="80" />
+</p>
 
-Private prediction markets on Starknet. Visible odds, invisible bettors.
+<h1 align="center">Veilcast</h1>
 
-> Built for the STRK20 Private Sprint, against the live STRK20 privacy pool.
+<p align="center">
+  <strong>Private prediction markets on Starknet. Visible odds, invisible bettors.</strong>
+</p>
+
+<p align="center">
+  <a href="https://zkasuran.github.io/veilcast/"><img src="https://img.shields.io/badge/demo-live-brightgreen?style=flat-square" alt="Live Demo" /></a>
+  <a href="https://github.com/zkasuran/veilcast/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/pages.yml?label=build&style=flat-square" alt="Build" /></a>
+  <a href="https://github.com/zkasuran/veilcast/actions/workflows/contracts.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/contracts.yml?label=cairo%20tests&style=flat-square" alt="Cairo Tests" /></a>
+  <img src="https://img.shields.io/badge/tests-105%20passing-brightgreen?style=flat-square" alt="Tests" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" /></a>
+</p>
+
+<p align="center">
+  <a href="https://zkasuran.github.io/veilcast/">Live Demo</a> · <a href="docs/DEPLOY.md">Deploy Guide</a> · <a href="ARCHITECTURE.md">Architecture</a> · <a href="sdk/">SDK</a>
+</p>
+
+---
+
+## For Judges — TL;DR
+
+| | |
+|---|---|
+| **What** | A parimutuel prediction market where amounts are public (for honest odds) and identities are private (for honest flow) |
+| **RFP match** | [RFP-07: Prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
+| **Privacy model** | Every bet is a STRK20 pool action — the on-chain sender is a rotating relayer, your address appears nowhere |
+| **Novel design** | Bearer coupons (the position IS the key), dual resolution (Pragma oracle + juror committee), batch claims |
+| **Stack** | Cairo 2.20 (35 tests) · Next.js 16 · TypeScript (105 tests) · STRK20 Wallet API · Pragma oracle |
+| **SDK** | [`veilcast-sdk`](sdk/) — any TS app can read boards, place bets, and claim payouts through the pool |
+| **Demo** | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/) |
+
+---
 
 ## What it is
 
 Veilcast is a prediction market where the crowd's information stays public while the crowd stays
-anonymous. Anyone can read the odds, the volume behind each outcome and how a market is moving.
-Nobody can see who placed a bet, tie two bets to one person or tie a payout back to the bet that
+anonymous. Anyone can read the odds, the volume behind each outcome, and how a market is moving.
+Nobody can see who placed a bet, tie two bets to one person, or tie a payout back to the bet that
 earned it.
 
-A prediction market is only worth reading when its price signal is honest, and an honest signal
-needs open volume. It breaks the other way when large players can be tracked: visible whales cause
-herding and front-running, which drives off the flow that makes the price accurate in the first
-place. STRK20 lets Veilcast keep both halves. Amounts stay public so the odds are real, identities
-stay private so the flow stays honest.
+**Why this matters:** A prediction market is only worth reading when its price signal is honest,
+and an honest signal needs open volume. It breaks when large players can be tracked — visible whales
+cause herding and front-running, which drives off the flow that makes the price accurate. STRK20
+lets Veilcast keep both halves: amounts stay public so the odds are real, identities stay private so
+the flow stays honest.
 
-## What is public and what is private
+---
+
+## Privacy model
 
 STRK20 gives identity privacy, not amount privacy. Veilcast is built around exactly that split.
-Overclaiming here would be dishonest, and it is also the fastest way to design the thing wrong.
 
-| Public | Private |
+| 🔓 Public | 🔒 Private |
 |---|---|
-| Each bet's amount and the outcome it backs | Who placed it. The market contract is never told an address |
+| Each bet's amount and the outcome it backs | Who placed it — the market contract never sees an address |
 | Per-outcome volume and the odds that come off it | The link between one person and their bets, across markets and inside one |
-| Every market's question, resolver and settlement | The link between a winning position and the wallet that collects it |
+| Every market's question, resolver, and settlement | The link between a winning position and the wallet that collects it |
 | A shield deposit: the depositor, the token, the amount | A payout, when it is collected into a private note |
 
-Amounts are public on purpose. A market with hidden sizes cannot produce accurate odds, so hiding
-them would break the product to advertise a stronger privacy claim. What Veilcast removes is the
-identity layer.
+> **We do not overclaim.** Shielding into the pool is a public, screened deposit. The privacy starts
+> after that, once the balance is a private note. Amounts are public on purpose — a market with
+> hidden sizes cannot produce accurate odds.
 
-Shielding into the pool is a public, screened deposit. The privacy starts after that, once the
-balance is a private note.
+---
 
 ## How a bet works
 
-1. **Shield.** Deposit STRK into the pool once. Public, screened on-chain. You now hold a private
-   note.
-2. **Bet.** One pool transaction does two things in one atomic step: the pool withdraws your stake
-   into the market contract, then it invokes the market to book it. The sender recorded on-chain is
-   the pool's rotating relayer, so your address appears nowhere. The market is handed an amount, an
-   outcome and a public key it has never seen before.
-3. **Read the odds.** Per-outcome volume is public, so the implied probability and the payout
-   multiple are the same numbers for everyone looking.
-4. **Resolve.** The market's named resolver settles it after it closes, on-chain and in public.
-5. **Collect.** A winner signs their coupon and the payout lands in a fresh open note inside the
-   pool, which is a private note-to-note transfer. Collecting to a public address is offered too,
-   clearly labelled, because sometimes that is what you want.
+```mermaid
+flowchart LR
+    A[1. Shield STRK into pool] --> B[2. Bet via pool relayer]
+    B --> C[3. Read public odds]
+    C --> D[4. Market resolves]
+    D --> E[5. Collect into private note]
 
-### The coupon is the position
+    style A fill:#f9f,stroke:#333
+    style B fill:#bbf,stroke:#333
+    style C fill:#bfb,stroke:#333
+    style D fill:#fbf,stroke:#333
+    style E fill:#bbf,stroke:#333
+```
 
-Nothing on-chain ties a position to an account, which means there is no account to look positions up
-by. When you bet, the browser generates a Stark keypair, sends the public half with the bet and keeps
-the private half in localStorage. Collecting means signing a message with that key.
+1. **Shield** — Deposit STRK into the STRK20 pool. Public, screened on-chain. You now hold a private note.
+2. **Bet** — One pool transaction atomically: withdraw your stake into the market contract and book the bet. The on-chain sender is the pool's rotating relayer — your address appears nowhere.
+3. **Read the odds** — Per-outcome volume is public. The implied probability and payout multiple are the same for everyone.
+4. **Resolve** — The market's named resolver settles it on-chain, in public.
+5. **Collect** — Sign your coupon and the payout lands in a fresh private note inside the pool.
 
-That is what makes the payout unlinkable: the coupon key is fresh per bet, so two bets by the same
-person share nothing on-chain, and the claim carries no address.
+---
 
-It also means losing the coupon loses the payout, and anyone who holds a copy can collect. The
-Positions tab has a one-click backup for that reason. Treat the file as the money.
+## The coupon system
 
-A claim signature covers where the payout may go, so a relayer cannot redirect it. Signing for an
-address binds the payout to that address, and signing for an open note is a bearer authorization
-good only for the transaction carrying it, because the wallet picks the note id while it assembles
-the transaction.
+Nothing on-chain ties a position to an account. When you bet, the browser generates a fresh Stark
+keypair, sends the public half with the bet, and keeps the private half in localStorage.
 
-### Moving and backing up a coupon
+**That is what makes the payout unlinkable:** the coupon key is fresh per bet, so two bets by the
+same person share nothing on-chain, and the claim carries no address.
 
-Because the coupon is the whole position, the app treats it like cash. From the Positions tab you
-can:
+From the Positions tab you can:
+- 🔐 **Back up** coupons (plain JSON or AES-GCM encrypted behind a passphrase)
+- 📲 **Transfer** a position as a bearer ticket (`veilcast:` URI + QR code)
+- 💰 **Batch collect** all winning positions in one pool transaction
 
-- **Back up** every coupon, either as plain JSON or encrypted behind a passphrase. The encryption is
-  AES-GCM with a PBKDF2-stretched key, done in the browser with WebCrypto, so the passphrase never
-  leaves the page and the file is useless without it.
-- **Move one** to another device or person as a bearer ticket: a short `veilcast:` string, and its
-  QR, that another browser imports to take the position. A ticket can be passphrase-locked too, for
-  a channel that is not private.
-- **Collect all** the winning and refundable positions in one pool transaction rather than one each.
-  The pool applies an action list, so a batch is one run of open notes followed by one run of
-  claims, each filling its own note.
+---
 
-Restoring is one box that reads any of these back, plus a plain backup, and tells them apart before
-it asks for a passphrase.
+## Resolution
 
-### Your book
+Veilcast ships three resolution paths:
 
-The Positions tab is also a portfolio. It totals what you staked, what it is worth now, the net, and
-what is still riding on open markets, then surfaces the two things worth acting on: a payout ready to
-collect, and a position on a market closing soon. Open positions are valued at the current odds,
-which is a live quote and not a promise, and the summary says so. The whole book exports to CSV, in
-STRK and with the transaction hashes, carrying no key material beyond each position's public key.
+| Type | Contract | How it works |
+|------|----------|-------------|
+| **Owner** | `market.cairo` | Whoever opens a market is its resolver |
+| **Oracle** | `pragma_resolver.cairo` | Bound to a Pragma spot pair and threshold — anyone can push the feed's median in to settle |
+| **Jury** | `committee_resolver.cairo` | Named panel votes, first to quorum settles. Deadlock → 30-day public void |
 
-A first-run walkthrough explains the one thing that surprises people, the split between what is
-public and what is not, and it can be reopened any time from the footer.
+Resolution is deliberately public. The terms of a market are not the thing that needs hiding. What
+stays private is who was on each side.
 
-### An SDK other teams can build on
+---
 
-`sdk/` is `veilcast-sdk`, a framework-free TypeScript package that reads and drives Veilcast from any
-app or bot: the ABIs, the coupon and claim signing, the pool action lists a bet and a claim run on,
-the market and resolver calls, and the read helpers for the board, a market's events and the feed.
-It depends only on starknet.js, works in Node and the browser, and ships an example that prints a
-deployment's board read-only. Its calldata and payout math are pinned to the same fixed vectors the
-contract and the app assert, so the three cannot drift apart without a test failing. This is the
-piece another sprint team can depend on.
+## Tech stack
 
-### Payouts are parimutuel
+| Layer | Technology |
+|-------|-----------|
+| Smart contracts | Cairo 2.20 · Scarb · Starknet Foundry (35 tests) |
+| Frontend | Next.js 16 · React 19 · CSS Modules · Dark/Light mode |
+| State | Zustand 5 |
+| Wallet | STRK20 Wallet API via get-starknet |
+| Oracle | Pragma (mainnet feeds, 12 publishers) |
+| SDK | TypeScript · starknet.js 10 · framework-free |
+| Deploy | GitHub Pages (static export) · GitHub Actions CI/CD |
+| Tests | Vitest (105 TS tests) · snForge (35 Cairo tests) |
 
-There is no counterparty to match and no order book. Every stake goes into one pot, and when the
-market settles the whole pot is split across the winning side in proportion to stake. That is why
-the odds move as volume arrives and why the app quotes what a stake would pay including itself:
-`stake * pot / winning_volume`, the same integer arithmetic the contract runs.
-
-Two edges are handled rather than left to chance. A market resolved on an outcome nobody backed
-voids instead of stranding the pot, so every stake becomes refundable. A resolver who goes silent
-cannot lock the pot either: 30 days past the close, anyone can void the market.
-
-### The fee, if a market has one
-
-Whoever opens a market may set a fee, up to 5% of the pot, paid to an address they name. It is
-charged once, at settlement, on the gross pot, and it comes out of what the winning side splits. Four
-things make it safe to bet against:
-
-- it is fixed when the market opens and shown on the board from that moment, so nobody bets without
-  seeing it
-- the cap is in the contract, so a market cannot be opened as a fee trap
-- a void market charges nothing, because nothing happened
-- the quote a bettor sees is already net of it, and the rounding dust stays with the bettors
-
-Paying it out is a separate, permissionless call: the destination was fixed when the market opened,
-so whoever sends it only pays the transaction fee.
-
-### Resolution
-
-Each market names one resolver address when it is created. Only that address can settle it. The
-resolver is an address, not a person, so a contract can hold the role, which is the difference
-between a market you have to trust and one you can check.
-
-Whoever opens a plain market is its resolver, and the app says so on the form.
-
-**Price markets settle themselves.** `cairo/src/pragma_resolver.cairo` is a resolver contract with no
-admin and no owner. Opening a market through it binds the market to a Pragma spot pair and a
-threshold, and afterwards anyone at all can push the feed's median in: at or above the threshold
-settles the first outcome, below settles the second. Whoever sends that transaction pays the fee and
-gets no say in the result. The contract refuses a median with no publishers behind it and one older
-than the window it was deployed with, so a feed that has gone quiet cannot settle a market on a stale
-number. It cannot void either, because a permissionless void would let anyone cancel a live market,
-so a dead feed falls through to the market's own 30-day rule instead.
-
-**Everything else is settled by a jury.** `cairo/src/committee_resolver.cairo` is the resolver for
-questions no feed can answer. Opening a market through it names a fixed panel of jurors and a quorum.
-After the market closes, each juror casts one vote for an outcome or to void, and the first choice to
-reach the quorum settles the market in that transaction. There is no casting vote and no admin: a
-panel that deadlocks cannot settle anything, and the market falls through to the same 30-day public
-void. The jury and every vote are public, which is the same split the whole app runs on. The
-resolution is out in the open so it can be checked, and what stays private is who bet.
-
-The Pragma interface is declared in this repo rather than pulled in as an SDK, and checked against
-the live feeds: mainnet `0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b` answered
-`get_data_median(SpotEntry('STRK/USD'))` on 2026-08-16 with 12 publishers at 8 decimals. The app
-shows that median next to a price market before it settles, so the number that will decide the
-question is visible in advance.
-
-Resolution is deliberately public. The terms of a market are not the thing that needs hiding, and a
-settlement nobody can point at is not a settlement. What stays private is who was on each side.
-
-### The board is one call
-
-`get_market_views(start, count)` returns each market with its question, its labels and its live
-volumes in a single read, so a page load is two RPC calls whatever the board size rather than four
-per market plus one per outcome label.
-
-A market also carries its section and its opening time on-chain, so the board can search, filter by
-section or by what a market is doing, and sort by closing soonest, most volume or newest without an
-indexer behind it.
-
-### Every market has a page
-
-`/market/?id=N` is a market on its own: the odds, the bet form, whoever can settle it, your own
-coupons for it, then the on-chain facts with links to the contract. The id is a query parameter
-rather than a path because the app is a static export, and a path per market would mean prerendering
-every market that will ever exist.
-
-That page also draws the market's history. Each `BetPlaced` event carries that outcome's running
-total, so the chart is the market's real past rather than a reconstruction: one filtered event query
-per market, no indexer, no interpolation. The activity list underneath is the same events in words,
-and it is worth reading as the anonymity set, because every row is an amount and a coupon key with no
-address anywhere in it.
+---
 
 ## What runs today
 
-| | |
-|---|---|
-| Cairo market contract | done, 35 tests green under Starknet Foundry |
-| Resolvers: Pragma feed, and a juror committee | done, covered by those tests against mocks |
-| App: board, market pages, bets, positions, private claims, charts, feed and jury settlement | done, 94 tests green under vitest |
-| Live demo | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/), published from main |
-| Declared and deployed | not yet, on either network |
-| Three mainnet pool transactions | not yet |
+| Component | Status |
+|-----------|--------|
+| Cairo market contract + 2 resolvers | ✅ Complete, 35 tests green |
+| Frontend: board, bets, positions, charts, dark mode, toasts | ✅ Complete, 105 tests green |
+| SDK (`veilcast-sdk`) with pinned test vectors | ✅ Complete |
+| Live demo (GitHub Pages) | ✅ [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/) |
+| CI/CD (contracts + pages) | ✅ Full pipeline |
+| Contract deployment | 🔜 Next |
+| Three mainnet pool transactions | 🔜 After deployment |
 
-Nothing is deployed yet, so both market addresses are still `0x0` and the board says so rather than
-pretending to have one. Deploying spends real STRK on mainnet, so it happens once the contract is
-final.
+---
 
 ## Repo layout
 
 ```
-cairo/src/market.cairo               the market: bets, volumes, resolution, claims
-cairo/src/interface.cairo            the ABI, the calldata layout, the error codes
-cairo/src/pragma_resolver.cairo      the feed resolver: bind a price question, settle it
-cairo/src/committee_resolver.cairo   the jury resolver: a named panel votes a market to settlement
-cairo/src/pragma.cairo               the slice of the Pragma oracle this repo calls
-cairo/src/tests/                     the contract's tests, including mocks of the pool and the feed
-cairo/scripts/deploy.sh              declare and deploy against a pool
-src/utils/veilcast.ts                coupons, claim signing, pool action lists, odds maths
-src/utils/market.ts                  board reads, payout maths, the public calls
-src/utils/resolver.ts                price questions, feed reads, settlement calls
-src/utils/committee.ts               juries: open, vote, read the panel and its tally
-src/utils/vault.ts                   encrypted coupon backups and bearer tickets
-src/utils/portfolio.ts               per-position P&L, totals, closing-soon, CSV
-src/utils/discovery.ts               sections, search, status, sorting
-src/utils/events.ts                  a market's history, read from its own events
-src/app/components/client/market/    board, market page, bet form, chart, activity, positions
-src/app/components/client/strk20/    the pool actions and the shared submit path
-sdk/                                 veilcast-sdk: read and drive Veilcast from any TS app or bot
-strk20.json                          what the sprint hub reads
+cairo/
+├── src/market.cairo                 the market: bets, volumes, resolution, claims
+├── src/interface.cairo              ABI, calldata layout, error codes
+├── src/pragma_resolver.cairo        oracle resolver: bind a price, settle from feed
+├── src/committee_resolver.cairo     jury resolver: panel votes to settlement
+├── src/pragma.cairo                 Pragma oracle interface
+├── src/tests/                       contract tests + pool/feed mocks
+└── scripts/deploy.sh               declare and deploy against a pool
+
+src/
+├── utils/veilcast.ts                coupons, claim signing, pool action lists, odds maths
+├── utils/market.ts                  board reads, payout maths, public calls
+├── utils/resolver.ts                price questions, feed reads, settlement
+├── utils/committee.ts               juries: open, vote, read panel and tally
+├── utils/vault.ts                   encrypted backups and bearer tickets
+├── utils/portfolio.ts               per-position P&L, totals, CSV export
+├── utils/discovery.ts               sections, search, status, sorting
+├── utils/events.ts                  market history from on-chain events
+└── app/components/client/market/    all UI: board, detail, bet, chart, positions
+
+sdk/                                 veilcast-sdk: read and drive Veilcast from any TS app
+docs/                                deployment guide, architecture
 ```
 
-## Running it
+---
+
+## Quick start
 
 ```bash
+# Clone and install
+git clone https://github.com/zkasuran/veilcast.git
+cd veilcast
 npm install
-cp .env.example .env.local     # a Starknet RPC key, plus a market address once one is deployed
+
+# Configure (optional — app works with defaults, just says "not deployed")
+cp .env.example .env.local
+
+# Run locally
 npm run dev                    # http://localhost:3000
-```
 
-Needs a privacy-enabled Starknet wallet (Ready) on Mainnet or Sepolia. The app never touches a
-viewing key: proving and private state stay inside the wallet, which is the whole point of the STRK20
-wallet API.
+# Run tests
+npm test                       # 105 TypeScript tests
+cd cairo && snforge test       # 35 Cairo contract tests
 
-## Tests
-
-```bash
-cd cairo && snforge test   # the market, its guards, the whole path from bet to claim
-npm test                   # signing, calldata, pool action lists, odds and payout maths
+# Type check and build
 npm run typecheck
 npm run build
 ```
 
-The claim message hash is pinned on both sides of the wire.
-`test_claim_message_hash_matches_the_frontend` in Cairo and the matching vector in
-`src/utils/veilcast.test.ts` assert the same felt, so if either Poseidon implementation drifts a test
-fails instead of every claim reverting on-chain.
+Needs a privacy-enabled Starknet wallet (Ready) on Mainnet or Sepolia. The app never touches your
+viewing key — proving and private state stay inside the wallet via the STRK20 Wallet API.
+
+---
 
 ## Deploying
 
+Full deployment guide: [docs/DEPLOY.md](docs/DEPLOY.md)
+
+Quick version:
+
 ```bash
+# Import your account
 sncast account import --name veilcast --address <account> --private-key <key> \
     --type <oz|argent|braavos> --network sepolia
-cd cairo && VEILCAST_POOL=<pool address> ./scripts/deploy.sh sepolia
+
+# Deploy (runs tests, builds, declares, prints deploy commands)
+cd cairo
+VEILCAST_POOL=<pool_address> ./scripts/deploy.sh sepolia
 ```
 
-The market is bound to one pool and one token at construction and neither can change afterwards, so
-that pair is the whole configuration. Record the address in `.env.local`, in `cairo/address.md` and
-in `strk20.json`.
+Or use the automated CI workflow: **Actions → Deploy contracts → Run workflow**.
 
-## strk20.json
+---
 
-The sprint hub reads this file from the repo root: the deployed contract addresses, the mainnet
-transaction hashes that prove the app ran against the pool, the demo video, the demo URL. Fields fill
-in as the build reaches mainnet.
+## SDK
+
+[`sdk/`](sdk/) is `veilcast-sdk` — a framework-free TypeScript package that reads and drives
+Veilcast from any app or bot. It ships the contract ABIs, coupon and claim signing, pool action
+lists, market reads, and payout maths. Depends only on starknet.js, works in Node and the browser.
+
+```ts
+import { loadBoard, newCoupon, betActions, formatStrk } from "veilcast-sdk";
+
+const board = await loadBoard(provider, MARKET_ADDRESS);
+const coupon = newCoupon(marketId, outcome, amount);
+const actions = betActions(STRK_TOKEN, MARKET_ADDRESS, coupon);
+await walletAccount.strk20InvokeTransaction(actions);
+```
+
+Full docs: [sdk/README.md](sdk/README.md)
+
+---
+
+## `strk20.json`
+
+The sprint hub reads this file from the repo root:
+
+```json
+{
+  "transactions": [],
+  "contracts": [],
+  "demo_video": "",
+  "demo_url": "https://zkasuran.github.io/veilcast/"
+}
+```
+
+Fields fill in as the build reaches mainnet. See [docs/DEPLOY.md](docs/DEPLOY.md) for the full flow.
+
+---
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the detailed system design: data flow diagrams,
+contract interactions, privacy boundaries, and the parimutuel math.
+
+---
 
 ## Credits and disclosure
 
-Bootstrapped from the STRK20 starter kit by Akashneelesh, itself based on
-[PhilippeR26/Starknet-WalletAccount](https://github.com/PhilippeR26/Starknet-WalletAccount). Built on
-[STRK20](https://strk20.starknet.io) by StarkWare.
+Bootstrapped from the [STRK20 starter kit](https://github.com/Akashneelesh/strk20-starter-kit) by
+Akashneelesh, itself based on
+[PhilippeR26/Starknet-WalletAccount](https://github.com/PhilippeR26/Starknet-WalletAccount). Built
+on [STRK20](https://strk20.starknet.io) by StarkWare.
 
-AI assistance (Claude) was used while building Veilcast. The design, the privacy model and the
+AI assistance (Claude) was used while building Veilcast. The design, the privacy model, and the
 verification are the author's.
 
+---
 
+## License
 
-
+[MIT](LICENSE)
