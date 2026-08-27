@@ -12,7 +12,7 @@
   <a href="https://zkasuran.github.io/veilcast/"><img src="https://img.shields.io/badge/demo-live-brightgreen?style=flat-square" alt="Live Demo" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/pages.yml?label=build&style=flat-square" alt="Build" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/contracts.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/contracts.yml?label=cairo%20tests&style=flat-square" alt="Cairo Tests" /></a>
-  <img src="https://img.shields.io/badge/tests-105%20passing-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-179%20passing-brightgreen?style=flat-square" alt="Tests" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" /></a>
 </p>
 
@@ -29,8 +29,8 @@
 | **What** | A parimutuel prediction market where amounts are public (for honest odds) and identities are private (for honest flow) |
 | **RFP match** | [RFP-07: Prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
 | **Privacy model** | Every bet is a STRK20 pool action — the on-chain sender is a rotating relayer, your address appears nowhere |
-| **Novel design** | Bearer coupons (the position IS the key), dual resolution (Pragma oracle + juror committee), batch claims |
-| **Stack** | Cairo 2.20 (35 tests) · Next.js 16 · TypeScript (105 tests) · STRK20 Wallet API · Pragma oracle |
+| **Novel design** | Bearer coupons (the position IS the key), dual resolution (Pragma oracle + juror committee), a leveraged FPMM book with a keeper-liquidated vault |
+| **Stack** | Cairo 2.20 (52 tests) · Next.js 16 · TypeScript (127 tests) · STRK20 Wallet API · Pragma oracle |
 | **SDK** | [`veilcast-sdk`](sdk/) — any TS app can read boards, place bets, and claim payouts through the pool |
 | **Demo** | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/) |
 
@@ -122,18 +122,47 @@ stays private is who was on each side.
 
 ---
 
+## Leverage
+
+Alongside the parimutuel board, Veilcast runs a leveraged market: isolated-margin directional
+positions on a binary book, opened and closed with the same privacy as a bet.
+
+- **Provable FPMM.** Each market is a constant-product book over YES and NO shares, priced in exact
+  integer arithmetic. No fixed-point `exp` or `ln`, so the math is auditable and every rounding step
+  favors the pool. The quote a trader sees in TypeScript is the number the contract books, pinned
+  felt for felt against the Cairo tests.
+- **Isolated margin, up to 5x.** A trader posts margin, the vault lends the rest up to the notional,
+  and the position is marked and settled against the live AMM price. Margin is the most a trader can
+  lose.
+- **Keeper-liquidated, insurance-backed.** Anyone can liquidate a position once its equity falls to
+  8% of notional, repaying the vault before the loan goes bad. An insurance fund, seeded by a 0.30%
+  open fee, absorbs any residual gap.
+- **Solvent by construction.** Reserves are backed one for one by STRK held in the contract (the
+  complete-set model), so the contract itself can never be drained. Leverage risk lives in the
+  vault, bounded by liquidation and insurance. The balance invariant `balance >= vault_free +
+  total_backing + insurance` is asserted on every path and fuzzed across random open, close and
+  liquidate sequences.
+- **Private open and close.** Both route through the STRK20 pool exactly like a bet, keyed by a
+  bearer coupon whose signature names the payout target so a relayer can never redirect it.
+  Liquidity and liquidation are public, because they are the market's plumbing, not a trade.
+
+Trade it from the **Leverage** tab: pick a side, post margin, choose leverage against a live quote,
+then watch the position marked to the book and close to your wallet.
+
+---
+
 ## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
-| Smart contracts | Cairo 2.20 · Scarb · Starknet Foundry (35 tests) |
+| Smart contracts | Cairo 2.20 · Scarb · Starknet Foundry (52 tests) |
 | Frontend | Next.js 16 · React 19 · CSS Modules · Dark/Light mode |
 | State | Zustand 5 |
 | Wallet | STRK20 Wallet API via get-starknet |
 | Oracle | Pragma (mainnet feeds, 12 publishers) |
 | SDK | TypeScript · starknet.js 10 · framework-free |
 | Deploy | GitHub Pages (static export) · GitHub Actions CI/CD |
-| Tests | Vitest (105 TS tests) · snForge (35 Cairo tests) |
+| Tests | Vitest (127 TS tests) · snForge (52 Cairo tests) |
 
 ---
 
@@ -141,13 +170,15 @@ stays private is who was on each side.
 
 | Component | Status |
 |-----------|--------|
-| Cairo market contract + 2 resolvers | ✅ Complete, 35 tests green |
-| Frontend: board, bets, positions, charts, dark mode, toasts | ✅ Complete, 105 tests green |
-| SDK (`veilcast-sdk`) with pinned test vectors | ✅ Complete |
+| Cairo market contract + 2 resolvers | ✅ Complete, live on mainnet |
+| Leveraged market (FPMM, vault, keeper liquidation) | ✅ Complete in code and UI, mainnet deploy pending |
+| Frontend: board, bets, positions, leverage, charts, dark mode | ✅ Complete |
+| SDK (`veilcast-sdk`) with pinned test vectors | ✅ Complete, market and leverage |
+| Contracts on Starknet mainnet | ✅ Market + Pragma + Committee deployed and verified |
+| Mainnet pool transactions | ✅ Three deposits and a private bet, in `strk20.json` |
 | Live demo (GitHub Pages) | ✅ [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/) |
 | CI/CD (contracts + pages) | ✅ Full pipeline |
-| Contract deployment | 🔜 Next |
-| Three mainnet pool transactions | 🔜 After deployment |
+| Tests | ✅ 52 Cairo (snForge) and 127 TypeScript (Vitest) green |
 
 ---
 
@@ -157,6 +188,9 @@ stays private is who was on each side.
 cairo/
 ├── src/market.cairo                 the market: bets, volumes, resolution, claims
 ├── src/interface.cairo              ABI, calldata layout, error codes
+├── src/leveraged_market.cairo       leveraged FPMM market: vault, margin, keeper liquidation
+├── src/leverage_interface.cairo     leverage ABI, calldata layout, error codes
+├── src/pricing.cairo                constant-product FPMM: buy, sell, price, all integer
 ├── src/pragma_resolver.cairo        oracle resolver: bind a price, settle from feed
 ├── src/committee_resolver.cairo     jury resolver: panel votes to settlement
 ├── src/pragma.cairo                 Pragma oracle interface
@@ -166,13 +200,15 @@ cairo/
 src/
 ├── utils/veilcast.ts                coupons, claim signing, pool action lists, odds maths
 ├── utils/market.ts                  board reads, payout maths, public calls
+├── utils/leverage.ts                leverage pricing mirror, quotes, coupons, actions, reads
 ├── utils/resolver.ts                price questions, feed reads, settlement
 ├── utils/committee.ts               juries: open, vote, read panel and tally
 ├── utils/vault.ts                   encrypted backups and bearer tickets
 ├── utils/portfolio.ts               per-position P&L, totals, CSV export
 ├── utils/discovery.ts               sections, search, status, sorting
 ├── utils/events.ts                  market history from on-chain events
-└── app/components/client/market/    all UI: board, detail, bet, chart, positions
+├── app/components/client/market/    board, detail, bet, chart, positions
+└── app/components/client/leverage/  the Leverage tab: trade, positions, vault
 
 sdk/                                 veilcast-sdk: read and drive Veilcast from any TS app
 docs/                                deployment guide, architecture
@@ -195,8 +231,8 @@ cp .env.example .env.local
 npm run dev                    # http://localhost:3000
 
 # Run tests
-npm test                       # 105 TypeScript tests
-cd cairo && snforge test       # 35 Cairo contract tests
+npm test                       # 127 TypeScript tests
+cd cairo && snforge test       # 52 Cairo contract tests
 
 # Type check and build
 npm run typecheck
@@ -243,24 +279,39 @@ const actions = betActions(STRK_TOKEN, MARKET_ADDRESS, coupon);
 await walletAccount.strk20InvokeTransaction(actions);
 ```
 
+The same three layers cover the leveraged market: `quoteOpen` and `markPosition` mirror the FPMM
+on-chain, `openActions` and `closeToWalletActions` build the private pool transactions, while
+`addLiquidityCall` and friends drive the vault.
+
 Full docs: [sdk/README.md](sdk/README.md)
 
 ---
 
 ## `strk20.json`
 
-The sprint hub reads this file from the repo root:
+The sprint hub reads this file from the repo root. It carries the live mainnet deployment: the
+market and both resolvers, plus four pool transactions (three deposits and a private bet).
 
 ```json
 {
-  "transactions": [],
-  "contracts": [],
+  "transactions": [
+    "0x747e97fa539bb1b566d1bcb5529c4c1089a46b4fca20aac8ba685ffdbdfde7",
+    "0x95ce11a4cb0ac58bd76a7e94b07b47650bdcf9769907c8c628c773ab00f78",
+    "0x21234b944ac0b7c8d58a6aff7d9a0878941ff0881de6a42a39cfecfbfd4f2e6",
+    "0x6fcd0c39c2407a50f42297fbcef65b9b3f278f86707f7c6bf4b5d1e324cc095"
+  ],
+  "contracts": [
+    { "name": "VeilcastMarket", "address": "0x036be78d…c36c6b8", "network": "mainnet" },
+    { "name": "PragmaResolver", "address": "0x0665a23c…80a259b", "network": "mainnet" },
+    { "name": "CommitteeResolver", "address": "0x00b0dec2…4e6cd7", "network": "mainnet" }
+  ],
   "demo_video": "",
   "demo_url": "https://zkasuran.github.io/veilcast/"
 }
 ```
 
-Fields fill in as the build reaches mainnet. See [docs/DEPLOY.md](docs/DEPLOY.md) for the full flow.
+The leveraged market's address joins `contracts` once it is deployed. See
+[docs/DEPLOY.md](docs/DEPLOY.md) for the full flow.
 
 ---
 

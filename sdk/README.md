@@ -31,9 +31,14 @@ The SDK exports three kinds of function:
 
 | Layer | Purpose | Example |
 |-------|---------|---------|
-| **Reads** | Fetch and decode on-chain state | `loadBoard()`, `loadMarketEvents()`, `oddsSeries()` |
-| **Actions** | Build STRK20 action lists for private operations | `betActions()`, `batchClaimIntoNotesActions()` |
-| **Calls** | Build `Call` objects for public admin operations | `createMarketCall()`, `resolveCall()`, `voteCall()` |
+| **Reads** | Fetch and decode on-chain state | `loadBoard()`, `loadLevBoard()`, `oddsSeries()` |
+| **Actions** | Build STRK20 action lists for private operations | `betActions()`, `openActions()`, `closeToWalletActions()` |
+| **Calls** | Build `Call` objects for public admin operations | `createMarketCall()`, `resolveCall()`, `addLiquidityCall()` |
+
+The leveraged market shares these three layers. `quoteOpen` and `markPosition` mirror the FPMM in
+`pricing.cairo` so a quote matches the contract felt for felt, `openActions` and
+`closeToWalletActions` build the private open and close, while the vault and admin calls
+(`addLiquidityCall`, `createLevMarketCall`, `liquidateCall`) round it out.
 
 ---
 

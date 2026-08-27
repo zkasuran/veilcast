@@ -1,6 +1,6 @@
 {
   "name": "veilcast-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read and drive Veilcast, the private prediction market on Starknet's STRK20 pool, from any TypeScript app or bot.",
   "license": "MIT",
   "type": "module",

@@ -131,6 +131,37 @@ Key functions:
   vote(market_id, outcome_or_void)                   // juror only, one vote each
 ```
 
+### LeveragedMarket (`cairo/src/leveraged_market.cairo`)
+
+The leveraged companion. A position is long one side of a binary FPMM book; the vault lends against
+the trader's margin to reach the notional, and a keeper liquidates it if it goes underwater. The
+pricing engine is `pricing.cairo`: exact integer arithmetic, no fixed-point exp or ln, every
+rounding step in the pool's favor.
+
+```
+Constructor: (pool: ContractAddress, token: ContractAddress)
+
+Storage:
+  vault_capital, vault_free        : u128         // LP net worth and the free slice it can lend
+  vault_shares, vault_shares_total : Map/u128     // LP share accounting
+  total_backing, insurance         : u128         // complete-set backing plus the bad-debt fund
+  markets   : Map<u64, LevMarket>                 // FPMM reserves + settlement metadata
+  positions : Map<(u64, u8, felt252), Position>   // (market, side, key) → margin, borrow, shares
+
+Key functions:
+  add_liquidity / remove_liquidity                // LPs fund the vault, priced in shares
+  create_market(resolver, close_at, liquidity)    // seed a 50/50 book from the vault
+  privacy_invoke(Open | Close)                    // pool-only: open or close a position privately
+  liquidate(market, side, position_key)           // permissionless once health <= 8%
+  resolve / void                                  // resolver settles or cancels
+  position_equity(...) → (value, equity, health)  // mark a position to the live book
+```
+
+**Risk parameters:** 5x leverage cap, 8% maintenance margin, 1% keeper reward, 0.30% open fee to
+insurance. **Solvency invariant:** `balance >= vault_free + total_backing + insurance` holds on
+every path. The contract keeps a complete YES+NO set behind every share, so it cannot be drained;
+the leverage risk is the vault's, bounded by liquidation and the insurance fund. Both are fuzzed.
+
 ---
 
 ## Data flow: placing a bet
@@ -296,7 +327,7 @@ src/app/
         ├── provider/             Wallet + RPC providers (Zustand)
         ├── strk20/               Shield, unshield, pool action submission
         ├── WalletHandle/         Connect/disconnect button
-        └── market/
+        ├── market/
             ├── MarketsPanel.tsx   Board grid with search/filter/sort
             ├── MarketCard.tsx     One market's card (odds bars, state)
             ├── MarketDetail.tsx   Full market page (chart, bet, positions)
@@ -313,6 +344,8 @@ src/app/
             ├── CommitteeVote.tsx  Jury voting interface
             ├── PortfolioSummary.tsx Totals, net P&L, CSV export
             └── QrCode.tsx         QR code renderer (qrcode-generator)
+        └── leverage/
+            └── LeveragePanel.tsx  Trade, positions and vault, in one panel
 ```
 
 **State management:** Zustand stores for wallet connection, current network, and provider instance.
@@ -331,13 +364,13 @@ censorship-resistant hosting on GitHub Pages or IPFS.
 
 | Layer | Purpose | Example |
 |-------|---------|---------|
-| **Reads** | Fetch and decode on-chain state | `loadBoard()`, `loadMarketEvents()`, `oddsSeries()` |
-| **Actions** | Build STRK20 action lists for private operations | `betActions()`, `batchClaimIntoNotesActions()` |
-| **Calls** | Build `Call` objects for public operations | `createMarketCall()`, `resolveCall()`, `voteCall()` |
+| **Reads** | Fetch and decode on-chain state | `loadBoard()`, `loadLevBoard()`, `oddsSeries()` |
+| **Actions** | Build STRK20 action lists for private operations | `betActions()`, `openActions()`, `closeToWalletActions()` |
+| **Calls** | Build `Call` objects for public operations | `createMarketCall()`, `resolveCall()`, `addLiquidityCall()` |
 
 The SDK depends only on `starknet` (peer, v10). It ships the contract ABIs, so consumers need
-no extra packages. The same payout math and claim-message-hash logic is tested against shared
-vectors with the Cairo contract and the app, ensuring all three implementations agree.
+no extra packages. The payout and FPMM math, the claim hash and the close hash are all tested against
+shared vectors with the Cairo contract and the app, so all three implementations agree.
 
 ---
 
@@ -345,12 +378,12 @@ vectors with the Cairo contract and the app, ensuring all three implementations 
 
 | Layer | Framework | Count | What's covered |
 |-------|-----------|-------|---------------|
-| Cairo contracts | snForge 0.63 | 35 | Full bet→resolve→claim path, edge cases, access control, fee math, resolvers, mocks of pool + oracle |
-| TypeScript utils | Vitest 4.1 | 105 | Calldata encoding, claim signature, parimutuel math, coupon vault (AES-GCM), board/market reads, event parsing, portfolio P&L, SDK |
+| Cairo contracts | snForge 0.63 | 52 | Full bet→resolve→claim path, access control, fee math, resolvers, the leveraged market's open/close/liquidate lifecycle, plus fuzz tests over the FPMM and the solvency invariant |
+| TypeScript utils | Vitest 4.1 | 127 | Calldata encoding, claim and close signatures, parimutuel and FPMM math, leverage quotes and position marks, coupon vault (AES-GCM), board/market reads, event parsing, portfolio P&L, SDK |
 
-**Pinned vectors:** The claim message hash is computed identically in Cairo and TypeScript and
-asserted against the same hardcoded felt in both test suites. A drift in either side fails a test
-before any on-chain transaction can revert.
+**Pinned vectors:** The claim and close message hashes are computed identically in Cairo and
+TypeScript and asserted against the same hardcoded felt in every suite. A drift in any side fails a
+test before an on-chain transaction can revert.
 
 ---
 
@@ -409,6 +442,6 @@ Three workflows:
 
 - **Sub-account positions:** When STRK20 sub-accounts ship, positions could be held as sub-account state instead of browser localStorage
 - **Cross-chain bets:** Bridge integration to accept bets from EVM/Solana wallets via the privacy pool
-- **Automated market makers:** Seeded liquidity for new markets to bootstrap the price signal
+- **AMM for the parimutuel board:** the leveraged market already runs a seeded FPMM; bringing that liquidity model to the main board would bootstrap thin markets
 - **Resolution DAOs:** Decentralized resolution infrastructure for arbitrary questions
 - **Mobile app:** React Native with secure coupon storage in the device keychain
