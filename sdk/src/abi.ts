@@ -1,6 +1,7 @@
 import marketAbi from "./abi/veilcastMarket.json" with { type: "json" };
 import pragmaResolverAbi from "./abi/pragmaResolver.json" with { type: "json" };
 import committeeResolverAbi from "./abi/committeeResolver.json" with { type: "json" };
+import leveragedMarketAbi from "./abi/leveragedMarket.json" with { type: "json" };
 import type { Abi } from "starknet";
 
 /// The contract ABIs, generated from the Cairo build, ready to hand to a starknet.js `Contract`.
@@ -9,3 +10,4 @@ import type { Abi } from "starknet";
 export const VEILCAST_MARKET_ABI = marketAbi as Abi;
 export const PRAGMA_RESOLVER_ABI = pragmaResolverAbi as Abi;
 export const COMMITTEE_RESOLVER_ABI = committeeResolverAbi as Abi;
+export const LEVERAGED_MARKET_ABI = leveragedMarketAbi as Abi;

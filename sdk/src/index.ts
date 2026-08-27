@@ -19,6 +19,7 @@ export * from "./constants.js";
 export * from "./coupon.js";
 export * from "./actions.js";
 export * from "./market.js";
+export * from "./leverage.js";
 export * from "./resolver.js";
 export * from "./committee.js";
 export * from "./events.js";

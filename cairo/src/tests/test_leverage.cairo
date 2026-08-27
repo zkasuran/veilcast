@@ -17,6 +17,7 @@ use veilcast::leverage_interface::{
     ILeveragedMarketSafeDispatcher, ILeveragedMarketSafeDispatcherTrait, LeverageAction, OpenInput,
     PositionState, SIDE_NO, SIDE_YES,
 };
+use veilcast::leveraged_market::close_message_hash;
 use veilcast::test_utils_contracts::mock_erc20::{IMockErc20Dispatcher, IMockErc20DispatcherTrait};
 
 const ONE: u128 = 1_000_000_000_000_000_000;
@@ -256,6 +257,23 @@ fn open_rejects_over_max_leverage() {
 // Map a fuzzer word into `[lo, lo + span)`, so a random u128 becomes a usable margin.
 fn bounded_u128(x: u128, lo: u128, span: u128) -> u128 {
     lo + x % span
+}
+
+/// The fixed vector the SDK and the app also pin. Three independent implementations, one number: if
+/// the close-signature layout drifts in any of them, a test fails here instead of every close
+/// reverting on-chain with a bad signature.
+#[test]
+fn test_close_message_hash_matches_the_frontend() {
+    assert_eq!(
+        close_message_hash(
+            lev_address: 'LEV'.try_into().unwrap(),
+            market_id: 7,
+            side: 1,
+            position_key: 'COUPON',
+            target: 0,
+        ),
+        0x1b63599a3692bd03b2fb7691332e685cffb4bb5217293a435bf23f2c4790e8e,
+    );
 }
 
 /// Open a position at a fuzzed margin, leverage and side, then close it straight back. The

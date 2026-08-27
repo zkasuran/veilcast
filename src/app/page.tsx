@@ -7,14 +7,16 @@ import Onboarding from "./components/Onboarding";
 import ToastContainer from "./components/Toast";
 import MarketsPanel from "./components/client/market/MarketsPanel";
 import PositionsPanel from "./components/client/market/PositionsPanel";
+import LeveragePanel from "./components/client/leverage/LeveragePanel";
 import PoolPanel, { type PoolAction } from "./components/client/strk20/PoolPanel";
 
-// Two market tabs, then the pool actions a bet is built on.
-type TabKey = "markets" | "positions" | PoolAction;
+// Two market tabs, then leverage, then the pool actions a bet is built on.
+type TabKey = "markets" | "positions" | "leverage" | PoolAction;
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "markets", label: "Markets" },
   { key: "positions", label: "Positions" },
+  { key: "leverage", label: "Leverage" },
   { key: "shield", label: "Shield" },
   { key: "send", label: "Send" },
   { key: "unshield", label: "Unshield" },
@@ -59,6 +61,8 @@ export default function Page() {
           <MarketsPanel />
         ) : tab === "positions" ? (
           <PositionsPanel />
+        ) : tab === "leverage" ? (
+          <LeveragePanel />
         ) : (
           <PoolPanel action={tab} />
         )}

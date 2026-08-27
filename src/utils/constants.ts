@@ -71,6 +71,21 @@ export function committeeForIndex(index: number): string {
     return "0x0";
 }
 
+// ─── Leveraged market ───────────────────────────────────────────────────────
+// Optional companion (cairo/src/leveraged_market.cairo): leveraged, isolated-margin positions on
+// an FPMM book, opened and closed privately through the pool. "0x0" means it is not deployed on
+// that network yet, and the Leverage tab says so rather than pretending to have a book.
+
+export const veilcastLeverageMainnet = process.env.NEXT_PUBLIC_VEILCAST_LEVERAGE_MAINNET ?? "0x0";
+export const veilcastLeverageSepolia = process.env.NEXT_PUBLIC_VEILCAST_LEVERAGE_SEPOLIA ?? "0x0";
+
+/// The leveraged market for a frontend provider index, or "0x0" where it is not deployed.
+export function leverageForIndex(index: number): string {
+    if (index === 0) return veilcastLeverageMainnet;
+    if (index === 2) return veilcastLeverageSepolia;
+    return "0x0";
+}
+
 /// The market contract for a frontend provider index (0 = Mainnet, 2 = Sepolia),
 /// or "0x0" where it is not deployed.
 export function marketForIndex(index: number): string {

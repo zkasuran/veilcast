@@ -10,7 +10,9 @@
 //! insurance fund. Opening and closing route through the STRK20 pool (`privacy_invoke`,
 //! pool-only), so the trader's identity is private; amounts are public (STRK20 model).
 
+use core::poseidon::poseidon_hash_span;
 use starknet::ContractAddress;
+use crate::leverage_interface::CLOSE_MESSAGE_TAG;
 
 #[starknet::interface]
 pub trait IErc20<TState> {
@@ -22,11 +24,26 @@ pub trait IErc20<TState> {
     fn approve(ref self: TState, spender: ContractAddress, amount: u256) -> bool;
 }
 
+/// The message a bearer coupon signs to close its position, target-bound exactly like a market
+/// claim: a zero `target` for a payout into an open note, or the recipient for a bound payout, so a
+/// signature that names an address can never be redirected. A free function so the contract, the
+/// SDK and the app can be pinned to one number in their test suites.
+pub fn close_message_hash(
+    lev_address: ContractAddress, market_id: u64, side: u8, position_key: felt252, target: felt252,
+) -> felt252 {
+    poseidon_hash_span(
+        array![
+            CLOSE_MESSAGE_TAG, lev_address.into(), market_id.into(), side.into(), position_key,
+            target,
+        ]
+            .span(),
+    )
+}
+
 #[starknet::contract]
 pub mod LeveragedMarket {
     use core::ecdsa::check_ecdsa_signature;
     use core::num::traits::Zero;
-    use core::poseidon::poseidon_hash_span;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
@@ -34,11 +51,11 @@ pub mod LeveragedMarket {
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use crate::interface::{OpenNoteDeposit, PayoutTarget};
     use crate::leverage_interface::{
-        CLOSE_MESSAGE_TAG, CloseInput, LEVERAGE_ONE, LevMarket, LevMarketState, LeverageAction,
-        MAX_LEVERAGE, OpenInput, Position, PositionState, SIDE_NO, SIDE_YES, errors,
+        CloseInput, LEVERAGE_ONE, LevMarket, LevMarketState, LeverageAction, MAX_LEVERAGE,
+        OpenInput, Position, PositionState, SIDE_NO, SIDE_YES, errors,
     };
     use crate::pricing;
-    use super::{IErc20Dispatcher, IErc20DispatcherTrait};
+    use super::{IErc20Dispatcher, IErc20DispatcherTrait, close_message_hash};
 
     // Risk parameters (basis points of notional unless noted).
     const MAINTENANCE_MARGIN_BPS: u16 = 800; // liquidate when equity/notional <= 8%
@@ -509,12 +526,8 @@ pub mod LeveragedMarket {
                     r.into()
                 },
             };
-            let msg = poseidon_hash_span(
-                array![
-                    CLOSE_MESSAGE_TAG, get_contract_address().into(), c.market_id.into(),
-                    c.side.into(), c.position_key, target_felt,
-                ]
-                    .span(),
+            let msg = close_message_hash(
+                get_contract_address(), c.market_id, c.side, c.position_key, target_felt,
             );
             assert(
                 check_ecdsa_signature(msg, c.position_key, c.signature_r, c.signature_s),
