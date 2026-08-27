@@ -253,4 +253,79 @@ fn open_rejects_over_max_leverage() {
         Result::Err(data) => assert(*data.at(0) == 'BAD_LEVERAGE', 'wrong err'),
     }
 }
-// PLACEHOLDER_LEVTESTS
+// Map a fuzzer word into `[lo, lo + span)`, so a random u128 becomes a usable margin.
+fn bounded_u128(x: u128, lo: u128, span: u128) -> u128 {
+    lo + x % span
+}
+
+/// Open a position at a fuzzed margin, leverage and side, then close it straight back. The
+/// contract must stay solvent throughout, the vault must lend exactly `borrowed`, and an
+/// immediate solo close must repay the loan in full so the vault is no worse off than before.
+#[test]
+#[fuzzer(runs: 24)]
+fn fuzz_open_then_close_keeps_the_vault_whole(margin_raw: u128, lev_raw: u32, side_raw: u8) {
+    let env = setup();
+    add_lp(env, 100000 * ONE);
+    create_market(env, 1000 * ONE, 9999999999);
+    let margin = bounded_u128(margin_raw, ONE, 50 * ONE);
+    let lev = 10000 + lev_raw % 40001; // [1x, 5x]
+    let side = side_raw % 2;
+    let kp = KeyPairTrait::<felt252, felt252>::generate();
+    let free_before = env.lev.get_vault_free();
+    pool_open(env, 0, side, kp.public_key, margin, lev);
+    let p = env.lev.get_position(0, side, kp.public_key);
+    assert(p.state == PositionState::Open, 'open');
+    assert(env.lev.get_vault_free() == free_before - p.borrowed, 'lent exactly borrowed');
+    assert_solvent(env);
+    pool_close(env, kp, 0, side, PAYEE());
+    assert(env.lev.get_position(0, side, kp.public_key).state == PositionState::Closed, 'closed');
+    assert(env.lev.get_vault_free() >= free_before, 'vault made whole');
+    assert_solvent(env);
+}
+
+/// Two traders on opposite sides at fuzzed margins never break the balance invariant, opening or
+/// closing in either order.
+#[test]
+#[fuzzer(runs: 24)]
+fn fuzz_two_opposite_positions_stay_solvent(m1_raw: u128, m2_raw: u128, lev_raw: u32) {
+    let env = setup();
+    add_lp(env, 100000 * ONE);
+    create_market(env, 1000 * ONE, 9999999999);
+    let m1 = bounded_u128(m1_raw, ONE, 40 * ONE);
+    let m2 = bounded_u128(m2_raw, ONE, 40 * ONE);
+    let lev = 10000 + lev_raw % 40001;
+    let a = KeyPairTrait::<felt252, felt252>::generate();
+    let b = KeyPairTrait::<felt252, felt252>::generate();
+    pool_open(env, 0, SIDE_YES, a.public_key, m1, lev);
+    assert_solvent(env);
+    pool_open(env, 0, SIDE_NO, b.public_key, m2, lev);
+    assert_solvent(env);
+    pool_close(env, a, 0, SIDE_YES, PAYEE());
+    assert_solvent(env);
+    pool_close(env, b, 0, SIDE_NO, PAYEE());
+    assert_solvent(env);
+}
+
+/// A fuzzed 5x long is crashed by a dominating whale on the other side, then liquidated. However
+/// deep the bad debt, the keeper path never leaves the contract owing more than it holds.
+#[test]
+#[fuzzer(runs: 24)]
+fn fuzz_liquidation_of_a_crashed_long_stays_solvent(margin_raw: u128) {
+    let env = setup();
+    add_lp(env, 100000 * ONE);
+    create_market(env, 100 * ONE, 9999999999);
+    let margin = bounded_u128(margin_raw, ONE, 50 * ONE);
+    let kp = KeyPairTrait::<felt252, felt252>::generate();
+    pool_open(env, 0, SIDE_YES, kp.public_key, margin, 50000); // 5x long YES
+    let whale = KeyPairTrait::<felt252, felt252>::generate();
+    pool_open(env, 0, SIDE_NO, whale.public_key, 500 * ONE, 50000); // crashes YES
+    assert_solvent(env);
+    let (_, _, health) = env.lev.position_equity(0, SIDE_YES, kp.public_key);
+    assert(health <= 800, 'should be underwater');
+    start_cheat_caller_address(env.lev_addr, KEEPER());
+    env.lev.liquidate(0, SIDE_YES, kp.public_key);
+    stop_cheat_caller_address(env.lev_addr);
+    let liq = env.lev.get_position(0, SIDE_YES, kp.public_key);
+    assert(liq.state == PositionState::Liquidated, 'liquidated');
+    assert_solvent(env);
+}

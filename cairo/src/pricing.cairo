@@ -102,4 +102,73 @@ mod tests {
         let (_, r_b, r_o) = buy(10000, 10000, 5000);
         assert(price_bps(r_b, r_o) > 5000, 'price moved up');
     }
+
+    // Map a fuzzer word into `[lo, lo + span)`, so a random u128 becomes a usable reserve.
+    fn bounded(x: u128, lo: u128, span: u128) -> u128 {
+        lo + x % span
+    }
+
+    /// A buy can only leave the pool at least as collateralized: the constant product never
+    /// shrinks, the bought reserve never grows, and the other grows by exactly the collateral in.
+    #[test]
+    #[fuzzer(runs: 200)]
+    fn fuzz_buy_never_shrinks_the_product(rb: u128, ro: u128, amt: u128) {
+        let r_b = bounded(rb, 1, 1_000_000_000_000);
+        let r_o = bounded(ro, 1, 1_000_000_000_000);
+        let amount = bounded(amt, 1, 1_000_000_000_000);
+        let (shares, new_b, new_o) = buy(r_b, r_o, amount);
+        let before: u256 = r_b.into() * r_o.into();
+        let after: u256 = new_b.into() * new_o.into();
+        assert(after >= before, 'product shrank');
+        assert(new_o == r_o + amount, 'other += amount');
+        assert(new_b <= r_b, 'bought reserve grew');
+        assert(shares <= r_b + amount, 'shares unbounded');
+    }
+
+    /// Buy a side then sell the exact shares straight back: rounding always favors the pool, so
+    /// the trader can never get more collateral out than they put in (no free money).
+    #[test]
+    #[fuzzer(runs: 200)]
+    fn fuzz_roundtrip_never_prints_money(rb: u128, ro: u128, amt: u128) {
+        let r_b = bounded(rb, 1, 1_000_000_000_000);
+        let r_o = bounded(ro, 1, 1_000_000_000_000);
+        let amount = bounded(amt, 1, 1_000_000_000);
+        let (shares, nb, no) = buy(r_b, r_o, amount);
+        if shares == 0 {
+            return;
+        }
+        let (back, sb, so) = sell(nb, no, shares);
+        assert(back <= amount, 'free money');
+        // The sell also cannot shrink the product: the pool stays solvent through the round-trip.
+        let mid: u256 = nb.into() * no.into();
+        let end: u256 = sb.into() * so.into();
+        assert(end >= mid, 'sell shrank product');
+    }
+
+    /// The two sides of a book always price a coin: YES + NO is 1 (10000 bps), off by at most one
+    /// bps of shared rounding, never more, so no side can be quoted below or above a coin.
+    #[test]
+    #[fuzzer(runs: 200)]
+    fn fuzz_prices_sum_to_one(rb: u128, ro: u128) {
+        let r_b = bounded(rb, 1, 1_000_000_000_000);
+        let r_o = bounded(ro, 1, 1_000_000_000_000);
+        let yes = price_bps(r_b, r_o);
+        let no = price_bps(r_o, r_b);
+        let sum = yes + no;
+        assert(sum == 10000 || sum == 9999, 'prices off a coin');
+    }
+
+    /// Buying a side never lowers that side's own price: the AMM is monotone, so a bettor cannot
+    /// buy in and immediately be quoted a better entry than before they traded.
+    #[test]
+    #[fuzzer(runs: 200)]
+    fn fuzz_buying_only_raises_its_own_price(rb: u128, ro: u128, amt: u128) {
+        let r_b = bounded(rb, 1, 1_000_000_000_000);
+        let r_o = bounded(ro, 1, 1_000_000_000_000);
+        let amount = bounded(amt, 1, 1_000_000_000_000);
+        let before = price_bps(r_b, r_o);
+        let (_, nb, no) = buy(r_b, r_o, amount);
+        let after = price_bps(nb, no);
+        assert(after >= before, 'price fell after a buy');
+    }
 }
