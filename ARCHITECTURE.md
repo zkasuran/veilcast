@@ -134,7 +134,7 @@ Key functions:
 ### LeveragedMarket (`cairo/src/leveraged_market.cairo`)
 
 The leveraged companion. A position is long one side of a binary FPMM book; the vault lends against
-the trader's margin to reach the notional, and a keeper liquidates it if it goes underwater. The
+the trader's margin to reach the notional; a keeper liquidates it if it goes underwater. The
 pricing engine is `pricing.cairo`: exact integer arithmetic, no fixed-point exp or ln, every
 rounding step in the pool's favor.
 
