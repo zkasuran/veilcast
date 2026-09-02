@@ -91,12 +91,12 @@ address.
 ## What it is
 
 Veilcast is a prediction market where the crowd's information stays public while the crowd stays
-anonymous. Anyone can read the odds, the volume behind each outcome, and how a market is moving.
-Nobody can see who placed a bet, tie two bets to one person, or tie a payout back to the bet that
+anonymous. Anyone can read the odds, the volume behind each outcome and how a market is moving.
+Nobody can see who placed a bet, tie two bets to one person or tie a payout back to the bet that
 earned it.
 
 **Why this matters:** A prediction market is only worth reading when its price signal is honest,
-and an honest signal needs open volume. It breaks when large players can be tracked — visible whales
+and an honest signal needs open volume. It breaks when large players can be tracked: visible whales
 cause herding and front-running, which drives off the flow that makes the price accurate. STRK20
 lets Veilcast keep both halves: amounts stay public so the odds are real, identities stay private so
 the flow stays honest.
@@ -109,13 +109,13 @@ STRK20 gives identity privacy, not amount privacy. Veilcast is built around exac
 
 | 🔓 Public | 🔒 Private |
 |---|---|
-| Each bet's amount and the outcome it backs | Who placed it — the market contract never sees an address |
+| Each bet's amount and the outcome it backs | Who placed it. The market contract is never sent an address |
 | Per-outcome volume and the odds that come off it | The link between one person and their bets, across markets and inside one |
-| Every market's question, resolver, and settlement | The link between a winning position and the wallet that collects it |
+| Every market's question, resolver and settlement | The link between a winning position and the wallet that collects it |
 | A shield deposit: the depositor, the token, the amount | A payout, when it is collected into a private note |
 
 > **We do not overclaim.** Shielding into the pool is a public, screened deposit. The privacy starts
-> after that, once the balance is a private note. Amounts are public on purpose — a market with
+> after that, once the balance is a private note. Amounts are public on purpose: a market with
 > hidden sizes cannot produce accurate odds.
 
 ---
@@ -136,21 +136,21 @@ flowchart LR
     style E fill:#bbf,stroke:#333
 ```
 
-1. **Shield** — Deposit STRK into the STRK20 pool. Public, screened on-chain. You now hold a private note.
-2. **Bet** — One pool transaction atomically: withdraw your stake into the market contract and book the bet. The on-chain sender is the pool's rotating relayer — your address appears nowhere.
-3. **Read the odds** — Per-outcome volume is public. The implied probability and payout multiple are the same for everyone.
-4. **Resolve** — The market's named resolver settles it on-chain, in public.
-5. **Collect** — Sign your coupon and the payout lands in a fresh private note inside the pool.
+1. **Shield.** Deposit STRK into the STRK20 pool. Public, screened on-chain. You now hold a private note.
+2. **Bet.** One pool transaction atomically: withdraw your stake into the market contract and book the bet. The on-chain sender is the pool's rotating relayer, so your address appears nowhere.
+3. **Read the odds.** Per-outcome volume is public. The implied probability and payout multiple are the same for everyone.
+4. **Resolve.** The market's named resolver settles it on-chain, in public.
+5. **Collect.** Sign your coupon and the payout lands in a fresh private note inside the pool.
 
 ---
 
 ## The coupon system
 
 Nothing on-chain ties a position to an account. When you bet, the browser generates a fresh Stark
-keypair, sends the public half with the bet, and keeps the private half in localStorage.
+keypair, sends the public half with the bet and keeps the private half in localStorage.
 
 **That is what makes the payout unlinkable:** the coupon key is fresh per bet, so two bets by the
-same person share nothing on-chain, and the claim carries no address.
+same person share nothing on-chain, then the claim carries no address.
 
 From the Positions tab you can:
 - 🔐 **Back up** coupons (plain JSON or AES-GCM encrypted behind a passphrase)
@@ -166,7 +166,7 @@ Veilcast ships three resolution paths:
 | Type | Contract | How it works |
 |------|----------|-------------|
 | **Owner** | `market.cairo` | Whoever opens a market is its resolver |
-| **Oracle** | `pragma_resolver.cairo` | Bound to a Pragma spot pair and threshold — anyone can push the feed's median in to settle |
+| **Oracle** | `pragma_resolver.cairo` | Bound to a Pragma spot pair and threshold. Anyone can push the feed's median in to settle |
 | **Jury** | `committee_resolver.cairo` | Named panel votes, first to quorum settles. Deadlock → 30-day public void |
 
 Resolution is deliberately public. The terms of a market are not the thing that needs hiding. What
@@ -229,6 +229,43 @@ It ships skills for **Claude Code, openclaw and Hermes**, plus a host-neutral `A
 machine-readable capability manifest, all generated from one source of truth so they cannot disagree.
 Every command prints a single JSON object, every money command is a dry run unless you pass
 `--confirm` and the exit codes are stable enough to branch on.
+
+**31 verbs. Every write entrypoint on both contracts is one of them.** Betting, leverage, mandates,
+liquidity, market creation, settlement and the keeper loop. Nothing is browser-only and nothing is
+agent-only: the two clients build byte-identical calldata, pinned by a hash asserted in the Cairo suite,
+the TypeScript suite and the agent suite.
+
+### For a host with no shell
+
+A skill file teaches a host that runs commands. A browser host (claude.ai, an IDE panel, a hosted agent)
+has none, so the runtime also speaks **Model Context Protocol** over stdio. `init` writes the config; any
+host reading an `mcpServers` map takes it verbatim.
+
+```bash
+npx veilcast-agent mcp
+```
+
+28 tools, generated from the same catalog as the skill files. Four verbs are withheld rather than offered
+broken: `init` needs a filesystem, `keeper` and `watch` never return, then `lev-close` takes the owner's
+bearer coupon, which must not cross a tool boundary into a hosted model's context. Asking for one returns
+the reason. `confirm` is never a required argument, because a schema that demanded it would get it set to
+satisfy the schema.
+
+### Alerts, with nothing to push into
+
+A browser host cannot receive a webhook. So `alerts` derives everything worth interrupting somebody over
+from the current block on each call, which means an alert can never be stale or fire twice for a
+condition already resolved.
+
+```bash
+veilcast-agent alerts --lp 0x<yourAddress>
+```
+
+Ranked by what ignoring it costs. `critical` is money at risk now: the solvency invariant broken, else a
+firable stop about to be liquidated instead, which charges the owner a penalty a stop avoids. `warning`
+costs money if left. `info` is an opportunity. Each alert carries a stable id so a host recognises one it
+already showed, plus the command that acts on it. `sources` reports which inputs were read, so a quiet
+answer cannot be mistaken for a clean one.
 
 ### Delegation without custody
 
@@ -455,6 +492,47 @@ exist: one walks the event log, the other walks blocks, which is the only way to
 
 ---
 
+### Phase 8 · The deploy, then what a real run finds, Sep 2
+
+The leveraged market went to mainnet. Before spending anything the devnet rehearsal ran all eleven steps
+green: declare, deploy, seed, create a market, open with a mandate, refuse a stranger key, refuse the real
+agent firing early, push the price through the band, fire the take, pay the pinned address, stay solvent.
+
+```
+LeveragedMarket  0x01912b5c0f775cc339db0cecd9b173cb6ad16f23686245ed9ac7642ad5e96774
+declare          40.74 STRK realized against a 91.6 STRK reserve
+vault            5 STRK seeded, market 0 opened with 2 STRK of depth
+leveraged open   0x272814a2995da23182f1f3cb46690567788764a544db63851ac11397e98cddb
+```
+
+The vault seeding and the market creation both ran through `lp-add` and `lev-create`, verbs written hours
+earlier. Their first real use was against mainnet with real money.
+
+**Then the interesting part.** A real run against a real chain found four things no test had:
+
+- **A declare is not deployable the instant it lands.** The declare succeeded, the deploy issued straight
+  after failed with `Class ... is not declared`. The node had not begun serving the class. The script now
+  polls `getClassByHash` first, because a read costs nothing and a failed deploy costs gas.
+- **The blind event scan, for the second time.** `keeper-scan` reported zero open positions with one open
+  on chain. A public RPC answers a `from_block: 0` range with an **empty page** rather than an error, so a
+  scanner starting at genesis is silently blind. The identical lie once hid a bet from `flow`. Both
+  readers now start at the recorded deploy block, with four tests pinning the floors.
+- **A library warning on stdout.** starknet.js logs a thin-tip-data notice to stdout during fee
+  estimation, which broke JSON parsing of a *successful* `lp-add`. The whole output contract is one JSON
+  document on stdout; over MCP a stray byte desynchronises the host's parser and kills the session with
+  nothing to look at. Silenced in both entry points.
+- **`alerts` demanded an agent key** and threw without one, which is wrong for an operator watching vault
+  health. It now reports mandates as unchecked rather than failing.
+
+Two numbers in the manual were also wrong and are now measured rather than projected: the declare's pad is
+**2.25x**, not the 1.5x recorded from an earlier estimate. `post-deploy.sh` had also been resolving its
+paths one directory too shallow, so it could not find the build it verifies against.
+
+None of that is visible in a demo. All of it is the difference between a project that ran once and a
+project somebody else could run.
+
+---
+
 ## Tech stack
 
 | Layer | Technology |
@@ -473,21 +551,22 @@ exist: one walks the event log, the other walks blocks, which is the only way to
 
 | | Status |
 |---|---|
-| Market contract plus two resolvers | ✅ live on Starknet mainnet, class hashes verified |
-| Mainnet pool transactions | ✅ **twelve**, of which **three score**: three private bets that each carry a pool event and a VeilcastMarket event. The other nine are a register and shields, which touch the pool without touching our code |
+| Four contracts on mainnet | ✅ market, both resolvers and the leveraged market, every class hash verified from chain |
+| Mainnet pool transactions | ✅ **fourteen**, of which **four score**: three private bets plus a leveraged open, each carrying a pool event and an event from a contract we list. The rest are a register and shields, which touch the pool without touching our code |
 | `verify` re-derives every claim from chain | ✅ every recorded claim holds, then it reports which transactions score rather than passing anything with a pool event |
 | Web app: board, bets, positions, leverage, mandates | ✅ complete |
 | `veilcast-sdk` with pinned vectors | ✅ market and leverage |
 | Leveraged market: FPMM, vault, keeper, insurance | ✅ **live on Starknet mainnet**, vault seeded, market 0 open, one real leveraged position |
-| On-chain mandates, adversarially fuzzed | ✅ complete |
-| `veilcast-agent`, skills for three hosts | ✅ complete, 6 verbs already live against mainnet |
+| On-chain mandates, adversarially fuzzed | ✅ live on mainnet, fuzzed across stranger keys, out-of-band prices and both replay directions |
+| `veilcast-agent` | ✅ 31 verbs, skills for three hosts, an MCP server for hosts with no shell, published on npm |
 | Manuals: integration, operations, security | ✅ complete |
-| Live markets a judge can bet on | ✅ two, both closing after judging |
+| Live markets a judge can trade | ✅ two parimutuel, both closing after judging, plus leveraged market 0 |
 | Demo video | ⏳ next |
 
-The leverage contract is built, fuzzed and rehearsed against a real node. Its mainnet declare is the
-one remaining spend, so the Leverage tab honestly says "not deployed on this network yet" rather than
-faking a book. Ten of the twenty agent verbs light up the moment it lands.
+Every contract is on mainnet and every verb reaches one. The claim leg is the single exception, failing
+upstream of us: an open-note claim reverts with a proof-version mismatch in the privacy SDK at
+`0.14.3-rc.5`. It runs end to end on Sepolia. It affects every team on the program. Written up in
+[OPERATIONS.md](docs/OPERATIONS.md) rather than left for a judge to discover.
 
 ---
 
@@ -582,8 +661,8 @@ the bar is a shortfall and exits 2. It also mirrors the hub's ten-hash window, s
 the total that scores:
 
 ```json
-{ "transactionsListed": 12, "transactionsChecked": 10, "beyondTheWindow": 2,
-  "countable": 3, "required": 3, "clearsTheBar": true, "poolOnly": 7 }
+{ "transactionsListed": 14, "transactionsChecked": 10, "beyondTheWindow": 4,
+  "countable": 4, "required": 3, "clearsTheBar": true, "poolOnly": 6 }
 ```
 
 ---
@@ -638,26 +717,29 @@ Full docs: [sdk/README.md](sdk/README.md)
 
 ## `strk20.json`
 
-The sprint hub reads this file from the repo root. It carries the live mainnet deployment: the market
-and both resolvers, plus **eight verified STRK20 pool transactions** in block order: a register, five
-shielding deposits across two accounts, then a private bet through the market.
+The sprint hub reads this file from the repo root. It carries the live mainnet deployment: four
+contracts, plus **fourteen STRK20 pool transactions of which four score.**
+
+The scoring rule is worth stating, because it is the one that catches people. A transaction counts when
+it succeeded, the pool emitted an event in it **and** a contract listed here emitted one too. Listing a
+contract therefore raises your own bar: a shield is a real pool transaction that never touches your code,
+so it stops counting the moment you claim a contract. The four that count are three private bets plus a
+leveraged open. The hub also reads only the **first ten hashes**, so the ones that score lead the list.
 
 ```json
 {
   "transactions": [
-    "0x7b645075d83cc2a4e68343ecaccda7d07833da04d3f0386b9841feb4ecd9e20",
-    "0x39f4616ba5164302df445e34a2a213270c4b457f5523608ef9c101e9649a4c7",
-    "0x747e97fa539bb1b566d1bcb5529c4c1089a46b4fca20aac8ba685ffdbdfde7",
-    "0x5c107536905a66222e21b47db8f36bf5634e047c377d86c1d4dfa96c53c3f8d",
-    "0x5da85f3e2ee82bac86521ce19edc34662cda4ab849f4459ba7e667d8bd5f85",
-    "0x95ce11a4cb0ac58bd76a7e94b07b47650bdcf9769907c8c628c773ab00f78",
-    "0x21234b944ac0b7c8d58a6aff7d9a0878941ff0881de6a42a39cfecfbfd4f2e6",
-    "0x6fcd0c39c2407a50f42297fbcef65b9b3f278f86707f7c6bf4b5d1e324cc095"
+    "0x6fcd0c39c2407a50f42297fbcef65b9b3f278f86707f7c6bf4b5d1e324cc095",
+    "0x7018ff034ca7b76cae1be9c6b2c4665ff4a1e65d43f33f799bc6ddf83b97f6f",
+    "0x739b9c625b6311fc7de107c7fb72858b9b987203249beabd096eb75931db8d",
+    "0x272814a2995da23182f1f3cb46690567788764a544db63851ac11397e98cddb",
+    "…10 more: the register and the shields, true but not countable"
   ],
   "contracts": [
     { "name": "VeilcastMarket", "address": "0x036be78d…c36c6b8", "network": "mainnet" },
     { "name": "PragmaResolver", "address": "0x0665a23c…80a259b", "network": "mainnet" },
-    { "name": "CommitteeResolver", "address": "0x00b0dec2…4e6cd7", "network": "mainnet" }
+    { "name": "CommitteeResolver", "address": "0x00b0dec2…4e6cd7", "network": "mainnet" },
+    { "name": "LeveragedMarket", "address": "0x01912b5c…5e96774", "network": "mainnet" }
   ],
   "demo_video": "",
   "demo_url": "https://zkasuran.github.io/veilcast/"
@@ -672,7 +754,7 @@ The leveraged market's address joins `contracts` once it is deployed. See
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the detailed system design: data flow diagrams,
-contract interactions, privacy boundaries, and the parimutuel math.
+contract interactions, privacy boundaries and the parimutuel math.
 
 ---
 
