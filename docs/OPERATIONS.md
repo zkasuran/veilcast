@@ -205,7 +205,14 @@ veilcast-agent vault                                  # free, backing, insurance
 veilcast-agent vault-lp --lp 0x<yourAddress>          # your shares, their worth, what a withdrawal pays
 ```
 
-`vault-lp` reports `worth` and `withdrawableNow` separately, because the gap between them is the one
+`vault-lp` also answers the question a share balance cannot: whether the position is up. Shares are
+minted at the price of the day, so the cost basis exists only in the log. The command folds it from the
+`LiquidityAdded` and `LiquidityRemoved` events the address itself caused. `pnl` is
+`worth + withdrawn - deposited`, signed, so a vault that took bad debt reports a loss rather than
+clamping to zero. `averageEntry` is the price paid across every deposit, which is the figure to compare
+against the live share price.
+
+It reports `worth` and `withdrawableNow` separately, because the gap between them is the one
 thing that surprises people. Free collateral caps a withdrawal. Seeding a market moves collateral out of
 it, so your shares can be worth their full slice while the vault cannot pay today. That is reported as
 `payable: false` rather than as a smaller balance, because the stake did not shrink.

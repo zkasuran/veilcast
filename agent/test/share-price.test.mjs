@@ -34,3 +34,63 @@ test("shares outstanding with no capital price at zero rather than throwing", ()
     // Only reachable if losses wiped the vault. An LP is owed nothing, so saying so beats a crash.
     assert.equal(sharePrice(0n, 100n * ONE), 0n);
 });
+
+/// An LP's result, folded from their own deposit and withdrawal history.
+///
+/// The share balance cannot answer "am I up", because shares are minted at the price of the day. These
+/// pin the folding and the sign, since a vault that took bad debt must report a loss rather than clamp.
+import { lpResult } from "../src/pricing.mjs";
+
+const add = (amount, shares) => ({ kind: "add", amount, shares });
+const remove = (shares, amount) => ({ kind: "remove", amount, shares });
+
+test("a flat vault shows no gain", () => {
+    const r = lpResult([add(100n * ONE, 100n * ONE)], 100n * ONE);
+    assert.equal(r.deposited, 100n * ONE);
+    assert.equal(r.withdrawn, 0n);
+    assert.equal(r.pnl, 0n);
+    assert.equal(r.averageEntry, ONE);
+});
+
+test("fees earned show as a gain before anything is withdrawn", () => {
+    // 100 in, now worth 112: the vault earned borrow fees and every share is worth more.
+    const r = lpResult([add(100n * ONE, 100n * ONE)], 112n * ONE);
+    assert.equal(r.pnl, 12n * ONE);
+    assert.equal(r.basis, 100n * ONE);
+});
+
+test("a loss is reported as a negative rather than clamped to zero", () => {
+    // Bad debt the insurance fund could not absorb. Hiding it would be worse than showing it.
+    const r = lpResult([add(100n * ONE, 100n * ONE)], 91n * ONE);
+    assert.equal(r.pnl, -9n * ONE);
+});
+
+test("realized and unrealized fold into one figure", () => {
+    // In 100, took out 60, the rest is worth 55. Up 15 overall even though the holding is below basis.
+    const r = lpResult([add(100n * ONE, 100n * ONE), remove(50n * ONE, 60n * ONE)], 55n * ONE);
+    assert.equal(r.withdrawn, 60n * ONE);
+    assert.equal(r.sharesBurned, 50n * ONE);
+    assert.equal(r.pnl, 15n * ONE);
+    // Basis is what is still at risk, so a withdrawal reduces it.
+    assert.equal(r.basis, 40n * ONE);
+});
+
+test("average entry is the price paid across every deposit, not the last one", () => {
+    // 100 at 1.00 then 60 at 1.20: 160 paid for 150 shares.
+    const r = lpResult([add(100n * ONE, 100n * ONE), add(60n * ONE, 50n * ONE)], 0n);
+    assert.equal(r.sharesMinted, 150n * ONE);
+    assert.equal(r.averageEntry, (160n * ONE * ONE) / (150n * ONE));
+});
+
+test("a fully exited LP keeps its realized result", () => {
+    // Nothing held, so worth is zero, but the profit taken on the way out still counts.
+    const r = lpResult([add(100n * ONE, 100n * ONE), remove(100n * ONE, 118n * ONE)], 0n);
+    assert.equal(r.pnl, 18n * ONE);
+    assert.equal(r.basis, 0n);
+});
+
+test("no history is no average, rather than an average of zero", () => {
+    const r = lpResult([], 0n);
+    assert.equal(r.averageEntry, null);
+    assert.equal(r.pnl, 0n);
+});

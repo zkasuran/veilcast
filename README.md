@@ -20,7 +20,7 @@
   <a href="https://zkasuran.github.io/veilcast/"><img src="https://img.shields.io/badge/demo-live%20on%20mainnet-brightgreen?style=flat-square" alt="Live demo" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/contracts.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/contracts.yml?label=cairo&style=flat-square" alt="Cairo tests" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/pages.yml?label=web&style=flat-square" alt="Web build" /></a>
-  <img src="https://img.shields.io/badge/tests-284%20passing-brightgreen?style=flat-square" alt="284 tests" />
+  <img src="https://img.shields.io/badge/tests-291%20passing-brightgreen?style=flat-square" alt="291 tests" />
   <img src="https://img.shields.io/badge/agent-Claude%20Code%20%C2%B7%20openclaw%20%C2%B7%20Hermes-8b5cf6?style=flat-square" alt="Agent skills" />
   <a href="https://www.npmjs.com/package/veilcast-agent"><img src="https://img.shields.io/npm/v/veilcast-agent?style=flat-square&label=veilcast-agent" alt="veilcast-agent on npm" /></a>
   <a href="https://www.npmjs.com/package/veilcast-sdk"><img src="https://img.shields.io/npm/v/veilcast-sdk?style=flat-square&label=veilcast-sdk" alt="veilcast-sdk on npm" /></a>
@@ -56,7 +56,7 @@
 | **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money** |
 | **Agent-drivable** | The only entry in the field an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes |
 | **Verify us, do not trust us** | `node agent/cli.mjs verify` re-derives every recorded transaction and class hash straight from chain, then exits non-zero if one fails |
-| **Tests** | **284 green.** 69 Cairo with zero warnings (12 of them fuzz), 145 TypeScript, 70 agent runtime |
+| **Tests** | **291 green.** 69 Cairo with zero warnings (12 of them fuzz), 145 TypeScript, 77 agent runtime |
 | **Published** | [`veilcast-agent`](https://www.npmjs.com/package/veilcast-agent) and [`veilcast-sdk`](https://www.npmjs.com/package/veilcast-sdk) are on npm, so `npx veilcast-agent markets` works from a bare shell |
 | **Stack** | Cairo 2.20 · Next.js 16 · TypeScript · a dependency-light Node agent runtime · STRK20 Wallet API · Pragma |
 
@@ -449,7 +449,7 @@ exist: one walks the event log, the other walks blocks, which is the only way to
 | Layer | Technology |
 |---|---|
 | Contracts | Cairo 2.20 · Scarb · Starknet Foundry · **69 tests, 12 of them fuzz, zero warnings** |
-| Agent runtime | Node 20, one dependency (starknet.js) · **70 tests** · 21 verbs · JSON out, dry run by default |
+| Agent runtime | Node 20, one dependency (starknet.js) · **77 tests** · 21 verbs · JSON out, dry run by default |
 | Frontend | Next.js 16 · React 19 · CSS Modules · dark and light |
 | SDK | TypeScript · starknet.js 10 · framework-free · **145 tests** shared with the app |
 | Privacy | STRK20 pool · Wallet API in the browser · OHTTP proving and discovery headlessly |
@@ -542,7 +542,7 @@ npm run dev                     # http://localhost:3000
 
 npm test                        # 145 TypeScript tests
 cd cairo && snforge test        # 69 Cairo tests, 12 of them fuzz
-cd agent && npm test            # 70 agent runtime tests
+cd agent && npm test            # 77 agent runtime tests
 
 npm run typecheck && npm run build
 ```

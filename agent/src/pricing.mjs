@@ -169,3 +169,41 @@ export function sharePrice(capital, sharesTotal) {
     if (sharesTotal === 0n) return 10n ** 18n;
     return (capital * 10n ** 18n) / sharesTotal;
 }
+
+/// An LP's realized and unrealized result, from their deposit and withdrawal history.
+///
+/// Shares are minted at the price of the day, so a share balance cannot say whether the position is up.
+/// Cost basis is what went in less what has already come out, so the answer is only recoverable from
+/// the log. `deposited` and `withdrawn` are token amounts rather than share counts, because a share count
+/// compared across two different prices means nothing.
+///
+/// `pnl` is `worth + withdrawn - deposited`, which folds realized and unrealized into the single figure
+/// an LP wants. It is signed: a vault that took bad debt returns a negative number rather than clamping,
+/// because hiding a loss is worse than reporting it.
+export function lpResult(history, worth) {
+    let deposited = 0n;
+    let withdrawn = 0n;
+    let sharesMinted = 0n;
+    let sharesBurned = 0n;
+    for (const row of history) {
+        if (row.kind === "add") {
+            deposited += row.amount;
+            sharesMinted += row.shares;
+        } else {
+            withdrawn += row.amount;
+            sharesBurned += row.shares;
+        }
+    }
+    const basis = deposited > withdrawn ? deposited - withdrawn : 0n;
+    return {
+        deposited,
+        withdrawn,
+        sharesMinted,
+        sharesBurned,
+        basis,
+        pnl: worth + withdrawn - deposited,
+        // Average price paid per share held, which is the number to compare against the live price.
+        // Undefined rather than zero when nothing was minted: there is no average of no purchases.
+        averageEntry: sharesMinted > 0n ? (deposited * 10n ** 18n) / sharesMinted : null,
+    };
+}

@@ -244,6 +244,55 @@ export async function receiptFacts(config, txHash, ours) {
     };
 }
 
+/// Every liquidity event an address has caused, oldest first, from the vault's own log.
+///
+/// The contract stores a share balance and nothing about how it was reached, so an LP's own history is
+/// only recoverable from the log. That matters for the one number a share balance cannot answer: whether
+/// the position is up. Shares are minted at the price of the day, so cost basis is the sum of what was
+/// deposited less what was already taken out, which no view can reconstruct.
+///
+/// `lp` is the first key on both events, so the filter is a key filter rather than a full scan.
+export async function liquidityHistory(config, lp, { chunkSize = 200, maxChunks = 40 } = {}) {
+    const added = hash.getSelectorFromName("LiquidityAdded");
+    const removed = hash.getSelectorFromName("LiquidityRemoved");
+    const key = num.toHex(BigInt(lp));
+    const rows = [];
+    for (const [selector, kind] of [
+        [added, "add"],
+        [removed, "remove"],
+    ]) {
+        let continuation;
+        for (let page = 0; page < maxChunks; page += 1) {
+            const result = await rpc(config.rpcUrl, "starknet_getEvents", [
+                {
+                    address: config.leverage,
+                    from_block: { block_number: 0 },
+                    to_block: "latest",
+                    keys: [[selector], [key]],
+                    chunk_size: chunkSize,
+                    ...(continuation ? { continuation_token: continuation } : {}),
+                },
+            ]);
+            for (const event of result.events ?? []) {
+                // LiquidityAdded is (amount, shares); LiquidityRemoved is (shares, amount). Decoding by
+                // position rather than by name, so the order follows the Cairo structs exactly.
+                const [first, second] = event.data ?? [];
+                rows.push({
+                    kind,
+                    amount: BigInt(kind === "add" ? (first ?? 0) : (second ?? 0)),
+                    shares: BigInt(kind === "add" ? (second ?? 0) : (first ?? 0)),
+                    blockNumber: event.block_number,
+                    txHash: event.transaction_hash,
+                });
+            }
+            continuation = result.continuation_token;
+            if (!continuation) break;
+        }
+    }
+    rows.sort((a, b) => a.blockNumber - b.blockNumber);
+    return rows;
+}
+
 /// Does a receipt count as this project running on mainnet?
 ///
 /// The program's rule in one place, pure and testable: the transaction must have succeeded, the pool

@@ -37,6 +37,7 @@ export {
     mandateStatus,
     keeperReward,
     sharePrice,
+    lpResult,
     formatStrk,
     parseStrk,
 } from "./pricing.mjs";
@@ -76,6 +77,7 @@ export {
     countsUnderProgramRule,
     quoteRemoveLiquidity,
     vaultShares,
+    liquidityHistory,
     classHashAt,
 } from "./chain.mjs";
 export {

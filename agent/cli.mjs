@@ -23,7 +23,7 @@ Read-only, free, no keys needed:
   flow       --market <id>   that market's bet history, read from its own event log
   lev-markets               the leveraged board with live prices
   vault                     vault free, backing, insurance, share price and the solvency invariant
-  vault-lp --lp ADDR        one LP's shares, what they are worth and what a withdrawal would pay
+  vault-lp --lp ADDR        one LP's shares, their worth, what a withdrawal pays and the P&L
   position   --market --side --key       one leveraged position, marked to the book
   mandate    --market --side --key       the authority a position carries
   quote      --market --side --margin --leverage   what an open would do, exactly as the contract

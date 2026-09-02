@@ -22,6 +22,7 @@ import {
     levMandate,
     levMarketCount,
     levPosition,
+    liquidityHistory,
     proveBlock,
     quoteRemoveLiquidity,
     receiptFacts,
@@ -33,6 +34,7 @@ import {
 import {
     formatStrk,
     keeperReward,
+    lpResult,
     mandateStatus,
     markPosition,
     parseStrk,
@@ -529,6 +531,11 @@ export async function vaultLp({ config, args }) {
     // when the full one is not, so the refusal names that rather than reading as "your money is gone".
     const full = held > 0n ? await quoteRemoveLiquidity(config, held) : { amount: 0n, payable: false };
     const withdrawableNow = full.payable ? full.amount : state.free < worth ? state.free : worth;
+    // Whether the position is up, which a share balance alone cannot say: shares are minted at the price
+    // of the day, so the cost basis only exists in the log. Skipped when nothing is held and nothing was
+    // ever withdrawn, since there is no history to read.
+    const history = held > 0n || args.history ? await liquidityHistory(config, lp) : [];
+    const result = history.length > 0 ? lpResult(history, worth) : null;
     return ok(
         "vault-lp",
         {
@@ -540,6 +547,8 @@ export async function vaultLp({ config, args }) {
             worth,
             quote: full,
             withdrawableNow,
+            result,
+            events: history.length,
             vault: {
                 free: state.free,
                 backing: state.backing,
@@ -552,6 +561,17 @@ export async function vaultLp({ config, args }) {
                 sharePrice: `${formatStrk(price)} STRK per share`,
                 worth: `${formatStrk(worth)} STRK`,
                 withdrawableNow: `${formatStrk(withdrawableNow)} STRK`,
+                ...(result
+                    ? {
+                          deposited: `${formatStrk(result.deposited)} STRK`,
+                          withdrawn: `${formatStrk(result.withdrawn)} STRK`,
+                          pnl: `${result.pnl < 0n ? "-" : "+"}${formatStrk(result.pnl < 0n ? -result.pnl : result.pnl)} STRK`,
+                          averageEntry:
+                              result.averageEntry === null
+                                  ? "no deposits"
+                                  : `${formatStrk(result.averageEntry)} STRK per share`,
+                      }
+                    : {}),
             },
         },
         held === 0n

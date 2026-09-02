@@ -125,7 +125,7 @@ function commandCatalog() {
         ]),
         read("lev-markets", "The leveraged board with live YES and NO prices."),
         read("vault", "Vault free collateral, backing, insurance, LP share price and the solvency invariant."),
-        read("vault-lp", "One liquidity provider's stake: shares held, what a share is worth, what burning the whole holding would pay and whether the vault can pay it now. remove_liquidity takes shares rather than STRK, so this is how an LP values the unit it burns.", [
+        read("vault-lp", "One liquidity provider's stake: shares held, what a share is worth, what burning the whole holding would pay, whether the vault can pay it now, plus the result folded from their own deposit and withdrawal log. remove_liquidity takes shares rather than STRK, so this is how an LP values the unit it burns.", [
             "--lp <address>",
         ]),
         read("position", "One position marked to the live book: equity, P&L, health.", [
