@@ -33,6 +33,100 @@ export const MAINTENANCE_MARGIN_BPS = 800;
 export const OPEN_FEE_BPS = 30;
 const BPS = 10_000n;
 
+/// Serde variant index of `LeverageAction::AgentClose`.
+const ACTION_AGENT_CLOSE = "0x2";
+
+/// A bounded authority the position owner grants at open, so an untrusted agent can fire a stop or a
+/// take-profit without ever being able to steal the payout.
+///
+/// The agent holds only its own signing key. It never holds the position key, so it cannot close on
+/// its own terms and it never names a recipient, because `payoutTarget` is pinned here at open and
+/// read back from storage on every agent close. Both halves are checked on-chain, so the agent's only
+/// remaining power is to submit a close the owner already authorized at a price the market reached.
+export type Mandate = {
+    /// The agent's public key. "0x0" means no agent may ever act on this position.
+    agentKey: string;
+    /// Fires at or below this marginal price in basis points. Zero disables the stop.
+    stopPriceBps: number;
+    /// Fires at or above this marginal price in basis points. Zero disables the take.
+    takePriceBps: number;
+    /// Where an agent close must pay. Pinned at open so the agent cannot redirect it.
+    payoutTarget: string;
+};
+
+/// A mandate that authorizes nobody, for a position its owner will manage itself.
+export function noMandate(): Mandate {
+    return { agentKey: "0x0", stopPriceBps: 0, takePriceBps: 0, payoutTarget: "0x0" };
+}
+
+/// A mandate granting `agentKey` the right to close inside a band, paying only `payoutTarget`.
+///
+/// Validated here exactly as the contract validates it, so a malformed authority is refused before it
+/// costs gas: an agent needs a key, a pinned payout address and at least one band. An unconditional
+/// authority is not a bound at all, which is why the contract rejects it as BAD_MANDATE.
+export function mandate({
+    agentKey,
+    stopPriceBps = 0,
+    takePriceBps = 0,
+    payoutTarget,
+}: {
+    agentKey: string;
+    stopPriceBps?: number;
+    takePriceBps?: number;
+    payoutTarget: string;
+}): Mandate {
+    if (!agentKey || BigInt(agentKey) === 0n) throw new Error("a mandate needs an agent key");
+    if (!payoutTarget || BigInt(payoutTarget) === 0n) {
+        throw new Error("a mandate must pin a payout address or the agent would have nowhere to pay");
+    }
+    if (stopPriceBps === 0 && takePriceBps === 0) {
+        throw new Error("a mandate must grant a stop or a take; an unconditional authority is refused on-chain");
+    }
+    for (const [name, value] of [
+        ["stopPriceBps", stopPriceBps],
+        ["takePriceBps", takePriceBps],
+    ] as const) {
+        if (!Number.isInteger(value) || value < 0 || value > 10_000) {
+            throw new Error(`${name} must be an integer in [0, 10000]`);
+        }
+    }
+    return { agentKey, stopPriceBps, takePriceBps, payoutTarget };
+}
+
+/// Whether a mandate's band is met at the live price and which half fired. The same test
+/// `do_agent_close` runs on-chain, so an agent can check for free rather than paying gas to be told
+/// MANDATE_NOT_MET.
+export type MandateStatus = {
+    priceBps: number;
+    hasAgent: boolean;
+    stopHit: boolean;
+    takeHit: boolean;
+    firable: boolean;
+    reason: string;
+};
+
+export function mandateStatus(market: LevMarketView, side: number, held: Mandate): MandateStatus {
+    const { rBought, rOther } = sidesOf(market, side);
+    const price = priceBps(rBought, rOther);
+    const hasAgent = Boolean(held.agentKey) && BigInt(held.agentKey) !== 0n;
+    const stopHit = held.stopPriceBps !== 0 && price <= held.stopPriceBps;
+    const takeHit = held.takePriceBps !== 0 && price >= held.takePriceBps;
+    return {
+        priceBps: price,
+        hasAgent,
+        stopHit,
+        takeHit,
+        firable: hasAgent && (stopHit || takeHit),
+        reason: !hasAgent
+            ? "no mandate on this position"
+            : stopHit
+              ? "stop reached"
+              : takeHit
+                ? "take reached"
+                : "price is inside the band, nothing to do",
+    };
+}
+
 export type LevMarketState = "Open" | "Resolved" | "Void";
 export type PositionState = "None" | "Open" | "Closed" | "Liquidated";
 
@@ -130,7 +224,7 @@ function writeLevCoupons(coupons: LevCoupon[]) {
 }
 
 /// The message a coupon signs to close, matching `close_message_hash` in the contract: a zero
-/// target for a payout into an open note, or the recipient for a bound payout, so a signature that
+/// target for a payout into an open note or the recipient for a bound payout, so a signature that
 /// names an address can never be redirected.
 export function closeMessageHash(
     levAddress: string,
@@ -142,8 +236,13 @@ export function closeMessageHash(
     return hash.computePoseidonHashOnElements([CLOSE_MESSAGE_TAG, levAddress, marketId, side, positionKey, target]);
 }
 
-/// Calldata for an open: `[0, market_id, side, position_key, margin, leverage_bps, max_price_bps]`.
-export function openCalldata(coupon: LevCoupon, maxPriceBps = 10_000): string[] {
+/// Calldata for an open, including the mandate:
+/// `[0, market_id, side, position_key, margin, leverage_bps, max_price_bps,
+///   agent_key, stop_price_bps, take_price_bps, payout_target]`.
+///
+/// Pass `noMandate()` for a self-managed position. Granting a mandate is only possible here, at open:
+/// an authority that could be widened later would be no bound at all, so the contract has no setter.
+export function openCalldata(coupon: LevCoupon, maxPriceBps = 10_000, granted: Mandate = noMandate()): string[] {
     return [
         ACTION_OPEN,
         num.toHex(coupon.marketId),
@@ -152,6 +251,36 @@ export function openCalldata(coupon: LevCoupon, maxPriceBps = 10_000): string[] 
         num.toHex(BigInt(coupon.margin)),
         num.toHex(coupon.leverageBps),
         num.toHex(maxPriceBps),
+        granted.agentKey,
+        num.toHex(granted.stopPriceBps),
+        num.toHex(granted.takePriceBps),
+        num.toHex(granted.payoutTarget),
+    ];
+}
+
+/// Calldata for an agent close: `[2, market_id, side, position_key, r, s]`.
+///
+/// Notice what is absent: no target and no terms. The contract reads the payout address and the price
+/// band from the stored mandate, so this is only a request to act now. The agent signs over the pinned
+/// target because that is the only message that verifies, which is exactly why it cannot redirect the
+/// money.
+export function agentCloseCalldata(
+    levAddress: string,
+    marketId: number,
+    side: number,
+    positionKey: string,
+    agentPrivateKey: string,
+    payoutTarget: string
+): string[] {
+    const messageHash = closeMessageHash(levAddress, marketId, side, positionKey, payoutTarget);
+    const signature = ec.starkCurve.sign(messageHash, agentPrivateKey);
+    return [
+        ACTION_AGENT_CLOSE,
+        num.toHex(marketId),
+        num.toHex(side),
+        positionKey,
+        num.toHex(signature.r),
+        num.toHex(signature.s),
     ];
 }
 
@@ -303,7 +432,7 @@ export function leveragedMarketContract(address: string, provider?: ProviderInte
     return new Contract({ abi: ABI, address, providerOrAccount: provider });
 }
 
-/// One leveraged market by id, or undefined if it does not exist.
+/// One leveraged market by id or undefined if it does not exist.
 export async function loadLevMarket(
     provider: ProviderInterface,
     address: string,
@@ -339,7 +468,7 @@ export async function loadPosition(
     );
 }
 
-/// The vault's free collateral, its committed backing, and its insurance fund. With the contract's
+/// The vault's free collateral, its committed backing and its insurance fund. With the contract's
 /// token balance these are the solvency invariant the Cairo suite fuzzes.
 export async function loadVault(
     provider: ProviderInterface,
@@ -393,11 +522,12 @@ export function openActions(
     token: string,
     levAddress: string,
     coupon: LevCoupon,
-    maxPriceBps = 10_000
+    maxPriceBps = 10_000,
+    granted: Mandate = noMandate()
 ): WALLET_API.STRK20_ACTION[] {
     return [
         { type: "withdraw", token, amount: num.toHex(BigInt(coupon.margin)), recipient: levAddress },
-        { type: "invoke", contract: levAddress, calldata: openCalldata(coupon, maxPriceBps) },
+        { type: "invoke", contract: levAddress, calldata: openCalldata(coupon, maxPriceBps, granted) },
     ];
 }
 
@@ -423,6 +553,56 @@ export function closeToWalletActions(
     recipient: string
 ): WALLET_API.STRK20_ACTION[] {
     return [{ type: "invoke", contract: levAddress, calldata: closeToAddressCalldata(coupon, levAddress, recipient) }];
+}
+
+/// The mandate a position carries, decoded from `get_mandate`.
+///
+/// Reading this is how an owner (or anyone auditing) sees exactly what authority was granted, rather
+/// than trusting an agent's word for it. A zeroed agent key means the position is self-managed.
+export async function loadMandate(
+    provider: ProviderInterface,
+    address: string,
+    marketId: number,
+    side: number,
+    positionKey: string
+): Promise<Mandate> {
+    return decodeMandate(
+        await leveragedMarketContract(address, provider).call("get_mandate", [marketId, side, positionKey])
+    );
+}
+
+export function decodeMandate(raw: unknown): Mandate {
+    const held = raw as {
+        agent_key: bigint;
+        stop_price_bps: bigint;
+        take_price_bps: bigint;
+        payout_target: bigint;
+    };
+    return {
+        agentKey: num.toHex(held.agent_key),
+        stopPriceBps: Number(held.stop_price_bps),
+        takePriceBps: Number(held.take_price_bps),
+        payoutTarget: num.toHex64(held.payout_target),
+    };
+}
+
+/// The STRK20 action list that fires a mandate. An agent submits this; it names no recipient, because
+/// the contract pays the address the owner pinned at open.
+export function agentCloseActions(
+    levAddress: string,
+    marketId: number,
+    side: number,
+    positionKey: string,
+    agentPrivateKey: string,
+    payoutTarget: string
+): WALLET_API.STRK20_ACTION[] {
+    return [
+        {
+            type: "invoke",
+            contract: levAddress,
+            calldata: agentCloseCalldata(levAddress, marketId, side, positionKey, agentPrivateKey, payoutTarget),
+        },
+    ];
 }
 
 // ── Decoding ──

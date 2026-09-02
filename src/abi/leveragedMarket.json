@@ -6,6 +6,28 @@
   },
   {
     "type": "struct",
+    "name": "veilcast::leverage_interface::Mandate",
+    "members": [
+      {
+        "name": "agent_key",
+        "type": "core::felt252"
+      },
+      {
+        "name": "stop_price_bps",
+        "type": "core::integer::u16"
+      },
+      {
+        "name": "take_price_bps",
+        "type": "core::integer::u16"
+      },
+      {
+        "name": "payout_target",
+        "type": "core::starknet::contract_address::ContractAddress"
+      }
+    ]
+  },
+  {
+    "type": "struct",
     "name": "veilcast::leverage_interface::OpenInput",
     "members": [
       {
@@ -31,6 +53,10 @@
       {
         "name": "max_price_bps",
         "type": "core::integer::u16"
+      },
+      {
+        "name": "mandate",
+        "type": "veilcast::leverage_interface::Mandate"
       }
     ]
   },
@@ -79,6 +105,32 @@
     ]
   },
   {
+    "type": "struct",
+    "name": "veilcast::leverage_interface::AgentCloseInput",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64"
+      },
+      {
+        "name": "side",
+        "type": "core::integer::u8"
+      },
+      {
+        "name": "position_key",
+        "type": "core::felt252"
+      },
+      {
+        "name": "signature_r",
+        "type": "core::felt252"
+      },
+      {
+        "name": "signature_s",
+        "type": "core::felt252"
+      }
+    ]
+  },
+  {
     "type": "enum",
     "name": "veilcast::leverage_interface::LeverageAction",
     "variants": [
@@ -89,6 +141,10 @@
       {
         "name": "Close",
         "type": "veilcast::leverage_interface::CloseInput"
+      },
+      {
+        "name": "AgentClose",
+        "type": "veilcast::leverage_interface::AgentCloseInput"
       }
     ]
   },
@@ -388,6 +444,30 @@
         "outputs": [
           {
             "type": "veilcast::leverage_interface::Position"
+          }
+        ],
+        "state_mutability": "view"
+      },
+      {
+        "type": "function",
+        "name": "get_mandate",
+        "inputs": [
+          {
+            "name": "market_id",
+            "type": "core::integer::u64"
+          },
+          {
+            "name": "side",
+            "type": "core::integer::u8"
+          },
+          {
+            "name": "position_key",
+            "type": "core::felt252"
+          }
+        ],
+        "outputs": [
+          {
+            "type": "veilcast::leverage_interface::Mandate"
           }
         ],
         "state_mutability": "view"
@@ -703,6 +783,43 @@
   },
   {
     "type": "event",
+    "name": "veilcast::leveraged_market::LeveragedMarket::AgentClosed",
+    "kind": "struct",
+    "members": [
+      {
+        "name": "market_id",
+        "type": "core::integer::u64",
+        "kind": "data"
+      },
+      {
+        "name": "side",
+        "type": "core::integer::u8",
+        "kind": "data"
+      },
+      {
+        "name": "position_key",
+        "type": "core::felt252",
+        "kind": "data"
+      },
+      {
+        "name": "agent_key",
+        "type": "core::felt252",
+        "kind": "data"
+      },
+      {
+        "name": "price_bps",
+        "type": "core::integer::u16",
+        "kind": "data"
+      },
+      {
+        "name": "payout",
+        "type": "core::integer::u128",
+        "kind": "data"
+      }
+    ]
+  },
+  {
+    "type": "event",
     "name": "veilcast::leveraged_market::LeveragedMarket::MarketResolved",
     "kind": "struct",
     "members": [
@@ -763,6 +880,11 @@
       {
         "name": "PositionLiquidated",
         "type": "veilcast::leveraged_market::LeveragedMarket::PositionLiquidated",
+        "kind": "nested"
+      },
+      {
+        "name": "AgentClosed",
+        "type": "veilcast::leveraged_market::LeveragedMarket::AgentClosed",
         "kind": "nested"
       },
       {

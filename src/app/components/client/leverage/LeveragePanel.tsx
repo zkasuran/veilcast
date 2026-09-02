@@ -9,6 +9,7 @@ import {
     type LevCoupon,
     type LevMarketView,
     type LevPosition,
+    type Mandate,
     LEVERAGE_ONE,
     MAINTENANCE_MARGIN_BPS,
     MAX_LEVERAGE,
@@ -19,12 +20,16 @@ import {
     createLevMarketCall,
     loadLevBoard,
     loadLevCoupons,
+    loadMandate,
     loadPosition,
     loadVault,
+    mandate as buildMandate,
+    mandateStatus,
     markLevClosed,
     markLevOpened,
     markPosition,
     newLevCoupon,
+    noMandate,
     openActions,
     priceBps,
     quoteOpen,
@@ -158,6 +163,13 @@ function TradeView({
     const [result, setResult] = useState<ActionResult | null>(null);
     const [busy, setBusy] = useState(false);
 
+    // The mandate this position will carry. Off by default: delegation is opt-in per position and a
+    // position opened without one can never be closed by anybody but its owner.
+    const [delegating, setDelegating] = useState(false);
+    const [agentKey, setAgentKey] = useState("");
+    const [stopStr, setStopStr] = useState("3000");
+    const [takeStr, setTakeStr] = useState("7000");
+
     const selected = useMemo(() => board.find((m) => m.id === selectedId) ?? board[0], [board, selectedId]);
     const margin = parseStrk(marginStr);
     const quote = useMemo(
@@ -165,19 +177,43 @@ function TradeView({
         [selected, side, margin, leverageBps]
     );
 
+    // The payout address is always the connected wallet. Deliberately not editable: the whole safety
+    // property is that the owner pins where the money lands, so letting an agent suggest it would give
+    // away exactly what the mandate exists to withhold.
+    const payoutTarget = strk20.address ?? "";
+
+    // Build the mandate the same way the contract validates it, so a malformed one is refused here
+    // rather than reverting on-chain and costing gas.
+    const mandateOrError = useMemo((): { granted: Mandate } | { error: string } => {
+        if (!delegating) return { granted: noMandate() };
+        try {
+            return {
+                granted: buildMandate({
+                    agentKey: agentKey.trim(),
+                    stopPriceBps: Number(stopStr) || 0,
+                    takePriceBps: Number(takeStr) || 0,
+                    payoutTarget,
+                }),
+            };
+        } catch (error) {
+            return { error: (error as Error).message };
+        }
+    }, [delegating, agentKey, stopStr, takeStr, payoutTarget]);
+    const granted = "granted" in mandateOrError ? mandateOrError.granted : null;
+
     async function open() {
-        if (!selected || margin === null) return;
+        if (!selected || margin === null || granted === null) return;
         setResult(null);
         setBusy(true);
         try {
-            // Saved before the wallet is touched: the key is the position, and a tab that dies
+            // Saved before the wallet is touched: the key is the position and a tab that dies
             // mid-signature must not take the margin with it.
             const coupon = newLevCoupon(selected.id, side, margin, leverageBps);
             saveLevCoupon(coupon);
             // Guard the open against the book moving under it: allow 2% of slip past the quote.
             const maxPriceBps = quote ? Math.min(10_000, quote.priceAfterBps + 200) : 10_000;
             const txHash = await strk20.submit(
-                openActions(addrSTRK, strk20.leverageAddress, coupon, maxPriceBps),
+                openActions(addrSTRK, strk20.leverageAddress, coupon, maxPriceBps, granted),
                 setResult,
                 `${formatStrk(margin)} STRK at ${leverageX(leverageBps)} on ${SIDE_LABEL[side]}`
             );
@@ -262,6 +298,88 @@ function TradeView({
                 </div>
             ) : null}
 
+            <div className={styles.createBox}>
+                <div className={styles.createHead}>
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={delegating}
+                            onChange={(e) => setDelegating(e.target.checked)}
+                            disabled={busy}
+                        />{" "}
+                        Let an agent close this for me
+                    </label>
+                </div>
+                {delegating ? (
+                    <>
+                        <div className={styles.createNote}>
+                            An agent can fire your stop or your take while you are offline. It cannot do anything else.
+                            The payout address below is written into the position when it opens. The contract pays that
+                            address on every agent close, so an agent can never send the money anywhere else. It also
+                            cannot act until the market actually reaches one of your prices. Give it the agent&apos;s
+                            public key only; it never needs your position key.
+                        </div>
+                        <input
+                            className={styles.textInput}
+                            value={agentKey}
+                            onChange={(e) => setAgentKey(e.target.value)}
+                            placeholder="Agent public key (run: veilcast-agent agent-key)"
+                            aria-label="Agent public key"
+                            spellCheck={false}
+                            disabled={busy}
+                        />
+                        <div className={styles.subLine}>
+                            <span>Stop below</span>
+                            <span className={styles.subMono}>{pct(Number(stopStr) || 0)}</span>
+                        </div>
+                        <input
+                            type="range"
+                            min={0}
+                            max={10_000}
+                            step={100}
+                            value={stopStr}
+                            onChange={(e) => setStopStr(e.target.value)}
+                            aria-label="Stop price"
+                            disabled={busy}
+                        />
+                        <div className={styles.subLine}>
+                            <span>Take above</span>
+                            <span className={styles.subMono}>{pct(Number(takeStr) || 0)}</span>
+                        </div>
+                        <input
+                            type="range"
+                            min={0}
+                            max={10_000}
+                            step={100}
+                            value={takeStr}
+                            onChange={(e) => setTakeStr(e.target.value)}
+                            aria-label="Take price"
+                            disabled={busy}
+                        />
+                        <div className={styles.factRows}>
+                            <FactRow
+                                label="Pays only"
+                                value={payoutTarget ? `${payoutTarget.slice(0, 10)}…${payoutTarget.slice(-4)}` : "connect a wallet"}
+                            />
+                            <FactRow
+                                label="Agent may act"
+                                value={
+                                    (Number(stopStr) || 0) === 0 && (Number(takeStr) || 0) === 0
+                                        ? "never (set a stop or a take)"
+                                        : `at or below ${pct(Number(stopStr) || 0)}, at or above ${pct(Number(takeStr) || 0)}`
+                                }
+                            />
+                            <FactRow label="Agent can never" value="redirect the payout or act outside the band" />
+                        </div>
+                        {"error" in mandateOrError ? <div className={styles.warn}>{mandateOrError.error}</div> : null}
+                    </>
+                ) : (
+                    <div className={styles.createNote}>
+                        Self-managed: only your coupon can close this position. Nobody else, including us, can.
+                    </div>
+                )}
+            </div>
+
             <div className={styles.splitNote}>
                 <span className={styles.splitPublic}>
                     Public: {margin === null ? "the margin" : `${formatStrk(margin)} STRK`} at {leverageX(leverageBps)} on{" "}
@@ -271,8 +389,16 @@ function TradeView({
             </div>
 
             {strk20.isConnected ? (
-                <button className={styles.btnCta} disabled={margin === null || busy} onClick={open}>
-                    {busy ? "Proving and submitting…" : "Open private position"}
+                <button
+                    className={styles.btnCta}
+                    disabled={margin === null || busy || granted === null}
+                    onClick={open}
+                >
+                    {busy
+                        ? "Proving and submitting…"
+                        : delegating
+                          ? "Open position with a mandate"
+                          : "Open private position"}
                 </button>
             ) : (
                 <SelectWallet variant="ctaBig" />
@@ -293,7 +419,16 @@ function FactRow({ label, value }: { label: string; value: string }) {
     );
 }
 
-type Row = { coupon: LevCoupon; market: LevMarketView; position: LevPosition; mark: ReturnType<typeof markPosition> };
+type Row = {
+    coupon: LevCoupon;
+    market: LevMarketView;
+    position: LevPosition;
+    mark: ReturnType<typeof markPosition>;
+    /// The authority this position carries, read from chain rather than remembered locally, so what is
+    /// shown is what the contract will actually enforce.
+    mandate: Mandate;
+    mandateStatus: ReturnType<typeof mandateStatus>;
+};
 
 /// The positions this browser holds a coupon for, marked live to the book. Closing pays the equity
 /// straight to the connected wallet; the coupon signature names that address, so nobody else can
@@ -321,7 +456,21 @@ function PositionsView({ board, strk20, onDone }: { board: LevMarketView[]; strk
                         coupon.positionKey
                     );
                     if (position.state !== "Open") continue;
-                    loaded.push({ coupon, market, position, mark: markPosition(market, coupon.side, position) });
+                    const held = await loadMandate(
+                        strk20.provider,
+                        strk20.leverageAddress,
+                        coupon.marketId,
+                        coupon.side,
+                        coupon.positionKey
+                    );
+                    loaded.push({
+                        coupon,
+                        market,
+                        position,
+                        mark: markPosition(market, coupon.side, position),
+                        mandate: held,
+                        mandateStatus: mandateStatus(market, coupon.side, held),
+                    });
                 } catch {
                     // Skip a position that will not read rather than blanking the list.
                 }
@@ -363,7 +512,7 @@ function PositionsView({ board, strk20, onDone }: { board: LevMarketView[]; strk
 
     return (
         <div className={styles.panel}>
-            {rows.map(({ coupon, position, mark }) => {
+            {rows.map(({ coupon, position, mark, mandate: held, mandateStatus: status }) => {
                 const neg = mark.pnl < 0n;
                 const abs = neg ? -mark.pnl : mark.pnl;
                 return (
@@ -383,6 +532,29 @@ function PositionsView({ board, strk20, onDone }: { board: LevMarketView[]; strk
                         {mark.liquidatable ? (
                             <div className={styles.warn}>Underwater: a keeper can liquidate this before you close it.</div>
                         ) : null}
+                        {status.hasAgent ? (
+                            <div className={styles.factRows}>
+                                <FactRow
+                                    label="Agent"
+                                    value={`${held.agentKey.slice(0, 10)}…${held.agentKey.slice(-4)}`}
+                                />
+                                <FactRow
+                                    label="May close"
+                                    value={`${held.stopPriceBps > 0 ? `at or below ${pct(held.stopPriceBps)}` : "no stop"}, ${
+                                        held.takePriceBps > 0 ? `at or above ${pct(held.takePriceBps)}` : "no take"
+                                    }`}
+                                />
+                                <FactRow
+                                    label="Pays only"
+                                    value={`${held.payoutTarget.slice(0, 10)}…${held.payoutTarget.slice(-4)}`}
+                                />
+                                <FactRow label="Right now" value={status.reason} />
+                            </div>
+                        ) : (
+                            <div className={styles.positionNote}>
+                                Self-managed: only your coupon can close this.
+                            </div>
+                        )}
                         <div className={styles.positionActions}>
                             <button
                                 className={styles.btnCta}
@@ -401,7 +573,7 @@ function PositionsView({ board, strk20, onDone }: { board: LevMarketView[]; strk
 }
 // PLACEHOLDER_VIEWS
 
-/// Provide or withdraw vault liquidity, and seed a new leveraged market from it. The vault is the
+/// Provide or withdraw vault liquidity and seed a new leveraged market from it. The vault is the
 /// counterparty every position borrows from; its free collateral caps the leverage it can lend, and
 /// its insurance fund absorbs any bad debt a liquidation cannot cover.
 function VaultView({ vault, strk20, onDone }: { vault: Vault | null; strk20: Strk20; onDone: () => void }) {
@@ -505,7 +677,7 @@ function VaultView({ vault, strk20, onDone }: { vault: Vault | null; strk20: Str
                 <div className={styles.createHead}>Open a leveraged market</div>
                 <div className={styles.createNote}>
                     Seeds an even 50/50 book from the vault. You are its resolver: settle it on the winning side after
-                    the close, or void it to refund every margin.
+                    the close. You can also void it to refund every margin.
                 </div>
                 <input
                     className={styles.textInput}

@@ -4,9 +4,15 @@
 #
 #   ./scripts/deploy-leverage-mainnet.sh
 #
-# SPENDS REAL STRK. Declare is the budget driver (estimate ~81 STRK padded, market declare
-# realized at about half its estimate). Deploy is a few STRK; the vault seed and the market
-# liquidity are recoverable (remove_liquidity / void), not spent.
+# SPENDS REAL STRK. Declare is the budget driver. The class carries the Mandate primitive, so it is
+# 20607 CASM felts, larger than VeilcastMarket's 16405 which settled at about 35 STRK.
+# estimateDeclareFee pads roughly 2x, so budget ~45 STRK for the declare and top the deployer up to
+# ~90 STRK before running this. Deploy is a few STRK; the vault seed and the market liquidity are
+# recoverable (remove_liquidity / void) rather than spent.
+#
+# The script refuses to start unless the balance covers the whole sequence. A half-finished deploy is
+# the expensive failure: the declare is paid for and non-refundable, so running out afterwards leaves
+# a class on-chain with nothing deployed against it.
 set -euo pipefail
 
 CAIRO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,6 +30,69 @@ MKT_LIQUIDITY="${MKT_LIQUIDITY:-2000000000000000000}" # 2 STRK seeding one marke
 CLOSE_AT="${CLOSE_AT:-$(( $(date -u +%s) + 604800 ))}" # 7 days out
 
 echo "==> tests + build"; snforge test >/dev/null && scarb build >/dev/null
+
+echo "==> preflight: can the deployer afford the whole sequence?"
+node - "$ACCOUNTS_FILE" "$VAULT_SEED" "$MKT_LIQUIDITY" <<'PREFLIGHT'
+const { RpcProvider, Account, json, hash } = require("starknet");
+const fs = require("node:fs");
+const [accountsFile, vaultSeed, marketLiquidity] = process.argv.slice(2);
+const RPC = process.env.VEILCAST_RPC_URL ?? "https://rpc.starknet.lava.build";
+const STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
+const ONE = 10n ** 18n;
+const strk = (value) => (Number(value / 10n ** 15n) / 1000).toFixed(3);
+
+(async () => {
+    const account = JSON.parse(fs.readFileSync(accountsFile, "utf8"))["alpha-mainnet"].veilcast;
+    const provider = new RpcProvider({ nodeUrl: RPC });
+    const [low] = await provider.callContract({
+        contractAddress: STRK,
+        entrypoint: "balanceOf",
+        calldata: [account.address],
+    });
+    const balance = BigInt(low);
+
+    const sierra = json.parse(fs.readFileSync("target/dev/veilcast_LeveragedMarket.contract_class.json", "utf8"));
+    const casm = json.parse(fs.readFileSync("target/dev/veilcast_LeveragedMarket.compiled_contract_class.json", "utf8"));
+    const signer = new Account({ provider, address: account.address, signer: account.private_key, cairoVersion: "1" });
+
+    // The estimate pads roughly 2x, but budget against the estimate rather than the projection: an
+    // underfunded run that dies after the declare has burned the single most expensive step.
+    let declareEstimate;
+    try {
+        const fee = await signer.estimateDeclareFee({ contract: sierra, casm });
+        declareEstimate = BigInt(fee.overall_fee);
+    } catch (error) {
+        if (!String(error.message).includes("already declared")) throw error;
+        declareEstimate = 0n;
+        console.log("   class already declared, so no declare cost");
+    }
+
+    // Deploy, two invokes to seed the vault, one to create a market, then headroom for the real
+    // leveraged open through the pool, which carries a proof and costs a few STRK.
+    const deployAndCalls = 3n * ONE;
+    const openThroughPool = 5n * ONE;
+    const needed = declareEstimate + BigInt(vaultSeed) + BigInt(marketLiquidity) + deployAndCalls + openThroughPool;
+
+    console.log(`   balance          ${strk(balance)} STRK`);
+    console.log(`   declare estimate ${strk(declareEstimate)} STRK (pads ~2x, so the realized cost is usually about half)`);
+    console.log(`   vault seed       ${strk(BigInt(vaultSeed))} STRK (recoverable with remove_liquidity)`);
+    console.log(`   market liquidity ${strk(BigInt(marketLiquidity))} STRK (recoverable by voiding the market)`);
+    console.log(`   deploy + calls   ${strk(deployAndCalls)} STRK`);
+    console.log(`   pool open        ${strk(openThroughPool)} STRK`);
+    console.log(`   total needed     ${strk(needed)} STRK`);
+
+    if (balance < needed) {
+        console.error(`\n   REFUSING TO START: short by ${strk(needed - balance)} STRK.`);
+        console.error(`   Top up ${account.address} then re-run.`);
+        console.error(`   Nothing has been spent.`);
+        process.exit(1);
+    }
+    console.log("   affordable, proceeding");
+})().catch((error) => {
+    console.error("   preflight failed:", error.message);
+    process.exit(1);
+});
+PREFLIGHT
 
 echo "==> declare LeveragedMarket (ignore 'already declared')"
 $SN declare --contract-name LeveragedMarket --network "$NET" || true

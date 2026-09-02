@@ -4,3 +4,4 @@ snfoundry_trace/
 coverage/
 profile/
 Scarb.lock
+node_modules

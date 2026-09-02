@@ -4,7 +4,7 @@
 //! are backed one-for-one by STRK held here (complete-set model: 1 STRK mints 1 YES + 1 NO, and
 //! only the winning side ever redeems, so the contract itself can never be drained). Leverage
 //! is a *vault* risk, not a contract-solvency risk: a trader posts `margin`, the vault lends
-//! `borrowed` to reach the notional, and positions are marked and settled against the live AMM
+//! `borrowed` to reach the notional and positions are marked and settled against the live AMM
 //! price. A keeper liquidates a position the moment its equity falls to the maintenance floor,
 //! so the vault's loan is recovered before it can go bad; any residual gap is absorbed by an
 //! insurance fund. Opening and closing route through the STRK20 pool (`privacy_invoke`,
@@ -25,7 +25,7 @@ pub trait IErc20<TState> {
 }
 
 /// The message a bearer coupon signs to close its position, target-bound exactly like a market
-/// claim: a zero `target` for a payout into an open note, or the recipient for a bound payout, so a
+/// claim: a zero `target` for a payout into an open note or the recipient for a bound payout, so a
 /// signature that names an address can never be redirected. A free function so the contract, the
 /// SDK and the app can be pinned to one number in their test suites.
 pub fn close_message_hash(
@@ -51,8 +51,8 @@ pub mod LeveragedMarket {
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use crate::interface::{OpenNoteDeposit, PayoutTarget};
     use crate::leverage_interface::{
-        CloseInput, LEVERAGE_ONE, LevMarket, LevMarketState, LeverageAction, MAX_LEVERAGE,
-        OpenInput, Position, PositionState, SIDE_NO, SIDE_YES, errors,
+        AgentCloseInput, CloseInput, LEVERAGE_ONE, LevMarket, LevMarketState, LeverageAction,
+        MAX_LEVERAGE, Mandate, OpenInput, Position, PositionState, SIDE_NO, SIDE_YES, errors,
     };
     use crate::pricing;
     use super::{IErc20Dispatcher, IErc20DispatcherTrait, close_message_hash};
@@ -83,6 +83,9 @@ pub mod LeveragedMarket {
         insurance: u128,
         markets: Map<u64, LevMarket>,
         positions: Map<(u64, u8, felt252), Position>,
+        /// The bounded agent authority a position was opened with, keyed the same way. A zeroed
+        /// `agent_key` means the position is self-managed and no agent close can ever pass.
+        mandates: Map<(u64, u8, felt252), Mandate>,
     }
 
     #[event]
@@ -94,33 +97,43 @@ pub mod LeveragedMarket {
         PositionOpened: PositionOpened,
         PositionClosed: PositionClosed,
         PositionLiquidated: PositionLiquidated,
+        AgentClosed: AgentClosed,
         MarketResolved: MarketResolved,
         MarketVoided: MarketVoided,
     }
 
     #[derive(Drop, starknet::Event)]
     struct LiquidityAdded {
+        #[key]
         lp: ContractAddress,
         amount: u128,
         shares: u128,
     }
     #[derive(Drop, starknet::Event)]
     struct LiquidityRemoved {
+        #[key]
         lp: ContractAddress,
         shares: u128,
         amount: u128,
     }
     #[derive(Drop, starknet::Event)]
     struct MarketCreated {
+        #[key]
         market_id: u64,
         resolver: ContractAddress,
         close_at: u64,
         liquidity: u128,
     }
+    /// The public half of an open: the size and the shares it bought. Carries no address, because
+    /// the contract is never told one. The identity fields are keyed so a keeper can filter the log
+    /// by market, side or position rather than fetching and decoding everything.
     #[derive(Drop, starknet::Event)]
     struct PositionOpened {
+        #[key]
         market_id: u64,
+        #[key]
         side: u8,
+        #[key]
         position_key: felt252,
         margin: u128,
         notional: u128,
@@ -128,26 +141,48 @@ pub mod LeveragedMarket {
     }
     #[derive(Drop, starknet::Event)]
     struct PositionClosed {
+        #[key]
         market_id: u64,
+        #[key]
         side: u8,
+        #[key]
         position_key: felt252,
         payout: u128,
     }
     #[derive(Drop, starknet::Event)]
     struct PositionLiquidated {
+        #[key]
         market_id: u64,
+        #[key]
         side: u8,
+        #[key]
         position_key: felt252,
         keeper: ContractAddress,
         bad_debt: u128,
     }
+    /// An agent fired a mandate. `price_bps` is the marginal price the mandate was met at, so the
+    /// owner (and anyone auditing) can check the agent acted inside the band it was granted.
+    #[derive(Drop, starknet::Event)]
+    struct AgentClosed {
+        #[key]
+        market_id: u64,
+        #[key]
+        side: u8,
+        #[key]
+        position_key: felt252,
+        agent_key: felt252,
+        price_bps: u16,
+        payout: u128,
+    }
     #[derive(Drop, starknet::Event)]
     struct MarketResolved {
+        #[key]
         market_id: u64,
         winning_side: u8,
     }
     #[derive(Drop, starknet::Event)]
     struct MarketVoided {
+        #[key]
         market_id: u64,
     }
 
@@ -313,6 +348,7 @@ pub mod LeveragedMarket {
             match action {
                 LeverageAction::Open(i) => self.do_open(i),
                 LeverageAction::Close(c) => self.do_close(c),
+                LeverageAction::AgentClose(a) => self.do_agent_close(a),
             }
         }
 
@@ -323,6 +359,11 @@ pub mod LeveragedMarket {
             self: @ContractState, market_id: u64, side: u8, position_key: felt252,
         ) -> Position {
             self.positions.read((market_id, side, position_key))
+        }
+        fn get_mandate(
+            self: @ContractState, market_id: u64, side: u8, position_key: felt252,
+        ) -> Mandate {
+            self.mandates.read((market_id, side, position_key))
         }
         fn price_bps(self: @ContractState, market_id: u64, side: u8) -> u16 {
             let (r_b, r_o) = sides(@self.market(market_id), side);
@@ -502,6 +543,17 @@ pub mod LeveragedMarket {
                     (i.market_id, i.side, i.position_key),
                     Position { shares, margin: i.margin, borrowed, state: PositionState::Open },
                 );
+            // A mandate is only stored when it names an agent and it must name a payout address:
+            // an agent close pays that address and nothing else, so a mandate with no target would
+            // be an authority with nowhere to send the money.
+            if i.mandate.agent_key != 0 {
+                assert(i.mandate.payout_target.is_non_zero(), errors::ZERO_MANDATE_TARGET);
+                assert(
+                    i.mandate.stop_price_bps != 0 || i.mandate.take_price_bps != 0,
+                    errors::BAD_MANDATE,
+                );
+                self.mandates.write((i.market_id, i.side, i.position_key), i.mandate);
+            }
             self
                 .emit(
                     PositionOpened {
@@ -540,21 +592,7 @@ pub mod LeveragedMarket {
             reduce_borrow(ref m, c.side, pos.borrowed);
             self.markets.write(c.market_id, m);
             self.total_backing.write(self.total_backing.read() - value);
-
-            let equity = if value > pos.borrowed {
-                value - pos.borrowed
-            } else {
-                0
-            };
-            let repay = value - equity; // min(value, borrowed)
-            self.vault_free.write(self.vault_free.read() + repay);
-            if value < pos.borrowed {
-                let gap = pos.borrowed - value;
-                let ins = self.insurance.read();
-                let cover = min(ins, gap);
-                self.insurance.write(ins - cover);
-                self.vault_free.write(self.vault_free.read() + cover);
-            }
+            let equity = self.repay_vault(value, pos.borrowed);
             pos.state = PositionState::Closed;
             pos.shares = 0;
             self.positions.write((c.market_id, c.side, c.position_key), pos);
@@ -568,6 +606,83 @@ pub mod LeveragedMarket {
                     },
                 );
             self.payout(c.target, equity)
+        }
+
+        /// Repay the vault out of a closing position's `value`, cover any shortfall from insurance,
+        /// and return the trader's remaining equity. Shared by the owner close and the agent close
+        /// so the two paths cannot drift in how they settle a loan.
+        fn repay_vault(ref self: ContractState, value: u128, borrowed: u128) -> u128 {
+            let equity = if value > borrowed {
+                value - borrowed
+            } else {
+                0
+            };
+            let repay = value - equity; // min(value, borrowed)
+            self.vault_free.write(self.vault_free.read() + repay);
+            if value < borrowed {
+                let gap = borrowed - value;
+                let ins = self.insurance.read();
+                let cover = min(ins, gap);
+                self.insurance.write(ins - cover);
+                self.vault_free.write(self.vault_free.read() + cover);
+            }
+            equity
+        }
+
+        /// An agent firing the mandate its position was opened with.
+        ///
+        /// Three things are checked on-chain and together they are why the agent key is worth
+        /// nothing on its own: the mandate has to exist and name this agent, the live marginal
+        /// price has to have reached the band the owner granted (at or below the stop or at or
+        /// above the take) and the payout goes to the address pinned at open rather than anywhere
+        /// the agent names. So an agent can only ever do what the owner already authorized, at a
+        /// price the market actually reached, paying the owner's own address.
+        fn do_agent_close(ref self: ContractState, a: AgentCloseInput) -> Span<OpenNoteDeposit> {
+            let mut m = self.market(a.market_id);
+            let mut pos = self.positions.read((a.market_id, a.side, a.position_key));
+            assert(pos.state == PositionState::Open, errors::NO_POSITION);
+            let mandate = self.mandates.read((a.market_id, a.side, a.position_key));
+            assert(mandate.agent_key != 0, errors::NO_MANDATE);
+
+            // The agent signs the same target-bound message the owner would, over the pinned
+            // target, but it is verified against the agent key. Neither signature is valid on the
+            // other path, so an owner close and an agent close can never be replayed as each other.
+            let target_felt: felt252 = mandate.payout_target.into();
+            let msg = close_message_hash(
+                get_contract_address(), a.market_id, a.side, a.position_key, target_felt,
+            );
+            assert(
+                check_ecdsa_signature(msg, mandate.agent_key, a.signature_r, a.signature_s),
+                errors::BAD_CLOSE_SIGNATURE,
+            );
+
+            let (r_b, r_o) = sides(@m, a.side);
+            let price = pricing::price_bps(r_b, r_o);
+            let stop_hit = mandate.stop_price_bps != 0 && price <= mandate.stop_price_bps;
+            let take_hit = mandate.take_price_bps != 0 && price >= mandate.take_price_bps;
+            assert(stop_hit || take_hit, errors::MANDATE_NOT_MET);
+
+            let (value, new_b, new_o) = pricing::sell(r_b, r_o, pos.shares);
+            write_sides(ref m, a.side, new_b, new_o);
+            reduce_borrow(ref m, a.side, pos.borrowed);
+            self.markets.write(a.market_id, m);
+            self.total_backing.write(self.total_backing.read() - value);
+            let equity = self.repay_vault(value, pos.borrowed);
+            pos.state = PositionState::Closed;
+            pos.shares = 0;
+            self.positions.write((a.market_id, a.side, a.position_key), pos);
+            self
+                .emit(
+                    AgentClosed {
+                        market_id: a.market_id,
+                        side: a.side,
+                        position_key: a.position_key,
+                        agent_key: mandate.agent_key,
+                        price_bps: price,
+                        payout: equity,
+                    },
+                );
+            self.payout(PayoutTarget::Address(mandate.payout_target), equity)
         }
         // PLACEHOLDER_LEVCLOSE
 

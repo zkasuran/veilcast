@@ -2,17 +2,22 @@ import { ec, num } from "starknet";
 import { describe, expect, it } from "vitest";
 import {
     type LevCoupon,
+    type Mandate,
     type LevMarketView,
     type LevPosition,
     SIDE_NO,
     SIDE_YES,
+    agentCloseCalldata,
     buy,
     closeIntoNoteCalldata,
     closeMessageHash,
     closeToAddressCalldata,
     isqrt,
+    mandate,
+    mandateStatus,
     markPosition,
     newLevCoupon,
+    noMandate,
     openCalldata,
     priceBps,
     quoteOpen,
@@ -67,11 +72,14 @@ describe("closeMessageHash", () => {
 describe("calldata", () => {
     it("lays an open out as the Open variant of LeverageAction", () => {
         const c = coupon();
+        // Eleven felts now: the seven position fields plus the four mandate fields, zeroed when the
+        // position is self-managed.
         expect(openCalldata(c)).toEqual([
             "0x0", "0x7", "0x1", c.positionKey, "0x1bc16d674ec80000", "0x7530", "0x2710",
+            "0x0", "0x0", "0x0", "0x0",
         ]);
         // A tighter slippage cap rides in the last slot.
-        expect(openCalldata(c, 6000).at(-1)).toBe("0x1770");
+        expect(openCalldata(c, 6000)[6]).toBe("0x1770");
     });
 
     it("signs a note close as bearer, at the note index it is given", () => {
@@ -155,5 +163,74 @@ describe("newLevCoupon", () => {
         expect(a.margin).toBe(ONE.toString());
         expect(a.leverageBps).toBe(20_000);
         expect(a.privateKey).not.toBe(b.privateKey);
+    });
+});
+
+describe("Mandate", () => {
+    /// The security claim, asserted in TypeScript exactly as the Cairo suite asserts it: a malformed
+    /// authority is refused before it can cost gas and a well-formed one pins its target.
+    it("refuses every malformed authority the contract refuses", () => {
+        expect(() => mandate({ agentKey: "0x0", stopPriceBps: 1, payoutTarget: "0xbeef" })).toThrow(
+            /needs an agent key/
+        );
+        expect(() => mandate({ agentKey: "0xa9e", stopPriceBps: 1, payoutTarget: "0x0" })).toThrow(
+            /must pin a payout address/
+        );
+        // No band at all is an unconditional authority, which the contract rejects as BAD_MANDATE.
+        expect(() => mandate({ agentKey: "0xa9e", payoutTarget: "0xbeef" })).toThrow(/must grant a stop or a take/);
+        expect(() => mandate({ agentKey: "0xa9e", stopPriceBps: 10_001, payoutTarget: "0xbeef" })).toThrow(
+            /stopPriceBps must be an integer/
+        );
+    });
+
+    it("accepts a one-sided band, because the other half is opt-out", () => {
+        expect(mandate({ agentKey: "0xa9e", stopPriceBps: 4000, payoutTarget: "0xbeef" }).takePriceBps).toBe(0);
+        expect(mandate({ agentKey: "0xa9e", takePriceBps: 8000, payoutTarget: "0xbeef" }).stopPriceBps).toBe(0);
+    });
+
+    it("puts the whole mandate inline in the open calldata", () => {
+        const granted = mandate({ agentKey: "0xa9e", stopPriceBps: 4000, takePriceBps: 8000, payoutTarget: "0xbeef" });
+        const calldata = openCalldata(coupon(), 6000, granted);
+        expect(calldata).toHaveLength(11);
+        expect(calldata.slice(-4)).toEqual(["0xa9e", "0xfa0", "0x1f40", "0xbeef"]);
+    });
+
+    it("writes a zeroed mandate for a self-managed position, which no agent can fire", () => {
+        expect(openCalldata(coupon()).slice(-4)).toEqual(["0x0", "0x0", "0x0", "0x0"]);
+        expect(noMandate()).toEqual({ agentKey: "0x0", stopPriceBps: 0, takePriceBps: 0, payoutTarget: "0x0" });
+    });
+
+    it("builds an agent close that names no target and no terms", () => {
+        const calldata = agentCloseCalldata(LEV, 7, SIDE_YES, "0xdead", PRIVATE_KEY, "0xbeef");
+        // [2, market, side, key, r, s]. Six felts: the agent chose none of the terms.
+        expect(calldata).toHaveLength(6);
+        expect(calldata[0]).toBe("0x2");
+        const signed = ec.starkCurve.sign(closeMessageHash(LEV, 7, SIDE_YES, "0xdead", "0xbeef"), PRIVATE_KEY);
+        expect(calldata[4]).toBe(num.toHex(signed.r));
+    });
+
+    it("signs over the pinned target, so a different target is a different signature", () => {
+        const pinned = agentCloseCalldata(LEV, 7, SIDE_YES, "0xdead", PRIVATE_KEY, "0xbeef");
+        const elsewhere = agentCloseCalldata(LEV, 7, SIDE_YES, "0xdead", PRIVATE_KEY, "0xfeed");
+        // Both are well-formed. Only the one over the STORED target verifies on-chain, which is why an
+        // agent cannot redirect a payout however it builds its calldata.
+        expect(pinned[4]).not.toBe(elsewhere[4]);
+    });
+
+    it("reports whether a band is met, matching do_agent_close", () => {
+        const book = market();
+        const stopOnly: Mandate = { agentKey: "0xa9e", stopPriceBps: 6000, takePriceBps: 0, payoutTarget: "0xbeef" };
+        const atStop = mandateStatus(book, SIDE_YES, stopOnly);
+        expect(atStop.priceBps).toBe(5000);
+        expect(atStop.stopHit).toBe(true);
+        expect(atStop.firable).toBe(true);
+
+        const inside: Mandate = { agentKey: "0xa9e", stopPriceBps: 1000, takePriceBps: 9000, payoutTarget: "0xbeef" };
+        expect(mandateStatus(book, SIDE_YES, inside).firable).toBe(false);
+        expect(mandateStatus(book, SIDE_YES, inside).reason).toBe("price is inside the band, nothing to do");
+
+        const none: Mandate = { agentKey: "0x0", stopPriceBps: 9999, takePriceBps: 1, payoutTarget: "0x0" };
+        expect(mandateStatus(book, SIDE_YES, none).firable).toBe(false);
+        expect(mandateStatus(book, SIDE_YES, none).reason).toBe("no mandate on this position");
     });
 });

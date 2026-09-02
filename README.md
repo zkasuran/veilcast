@@ -12,7 +12,7 @@
   <a href="https://zkasuran.github.io/veilcast/"><img src="https://img.shields.io/badge/demo-live-brightgreen?style=flat-square" alt="Live Demo" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/pages.yml?label=build&style=flat-square" alt="Build" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/contracts.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/contracts.yml?label=cairo%20tests&style=flat-square" alt="Cairo Tests" /></a>
-  <img src="https://img.shields.io/badge/tests-179%20passing-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-253%20passing-brightgreen?style=flat-square" alt="Tests" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" /></a>
 </p>
 
@@ -29,8 +29,9 @@
 | **What** | A parimutuel prediction market where amounts are public (for honest odds) and identities are private (for honest flow) |
 | **RFP match** | [RFP-07: Prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
 | **Privacy model** | Every bet is a STRK20 pool action — the on-chain sender is a rotating relayer, your address appears nowhere |
-| **Novel design** | Bearer coupons (the position IS the key), dual resolution (Pragma oracle + juror committee), a leveraged FPMM book with a keeper-liquidated vault |
-| **Stack** | Cairo 2.20 (52 tests) · Next.js 16 · TypeScript (127 tests) · STRK20 Wallet API · Pragma oracle |
+| **Novel design** | Bearer coupons (the position IS the key), dual resolution (Pragma oracle + juror committee), a leveraged FPMM book with a keeper-liquidated vault, plus on-chain mandates that let an agent trade for you without being able to take your money |
+| **Agent-drivable** | The only STRK20 entry an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes |
+| **Stack** | Cairo 2.20 (66 tests) · Next.js 16 · TypeScript (141 tests) · Node agent runtime (46 tests) · STRK20 Wallet API · Pragma oracle |
 | **SDK** | [`veilcast-sdk`](sdk/) — any TS app can read boards, place bets, and claim payouts through the pool |
 | **Demo** | [zkasuran.github.io/veilcast](https://zkasuran.github.io/veilcast/) |
 
@@ -151,18 +152,64 @@ then watch the position marked to the book and close to your wallet.
 
 ---
 
+## Agents
+
+Veilcast is drivable by an autonomous agent on mainnet, with no browser and no human in the loop.
+
+Most STRK20 dapps cannot be, because a pool action carries a STARK proof and the mainnet proving
+service URL was never published, so the field settled on a browser wallet with the prover baked in.
+The proving and discovery services are reachable over OHTTP with no API key, so a process can prove
+and submit on its own. `agent/` encodes that whole flow, along with every rule it took a failure to
+learn. See [docs/INTEGRATION.md](docs/INTEGRATION.md).
+
+```bash
+npx veilcast-agent init      # detects your host, writes its skill files, generates a key, probes mainnet
+veilcast-agent status        # what you are pointed at and what you may do
+veilcast-agent markets       # the live mainnet board: questions, odds and what a stake pays
+veilcast-agent flow --market 0   # that market's bet history, amounts and bearer keys, never addresses
+```
+
+Those two read the deployed mainnet market, so they work right now with no keys and no setup. The board
+is decoded straight from raw felts, which means the runtime needs no ABI file and cannot drift from the
+deployment. `markets` also quotes what a given stake would pay, counting itself into the pot the way the
+contract does, so an agent can refuse a bet whose multiple is below 1.0.
+
+It ships skills for **Claude Code, openclaw and Hermes**, plus a host-neutral `AGENTS.md` and a
+machine-readable capability manifest, all generated from one source of truth so they cannot disagree.
+Every command prints a single JSON object, every money command is a dry run unless you pass
+`--confirm` and the exit codes are stable enough to branch on.
+
+### Delegation without custody
+
+The interesting part is what an agent is allowed to do. A **mandate** is a bounded authority the
+position owner attaches at open: an agent key, a stop and take price band and a payout address. All
+three are stored on-chain and checked on every agent close.
+
+So an agent can fire your stop while you sleep. It cannot redirect the payout, cannot act outside the
+band, cannot widen its own authority, cannot touch a self-managed position and cannot pass its
+signature off as yours. None of that is policy in the CLI. It is
+[cairo/src/leveraged_market.cairo](cairo/src/leveraged_market.cairo), which is why an agent key is
+safe to hand out: the worst a stolen one buys is firing a stop the owner already asked for, at a price
+the market actually reached, paying the owner's own address.
+
+That claim is fuzzed rather than asserted. See [docs/SECURITY.md](docs/SECURITY.md) for the threat
+model and the test that proves each line of it and [docs/OPERATIONS.md](docs/OPERATIONS.md) for
+running a keeper or a watcher with measured costs.
+
+---
+
 ## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
-| Smart contracts | Cairo 2.20 · Scarb · Starknet Foundry (52 tests) |
+| Smart contracts | Cairo 2.20 · Scarb · Starknet Foundry (66 tests) |
 | Frontend | Next.js 16 · React 19 · CSS Modules · Dark/Light mode |
 | State | Zustand 5 |
 | Wallet | STRK20 Wallet API via get-starknet |
 | Oracle | Pragma (mainnet feeds, 12 publishers) |
 | SDK | TypeScript · starknet.js 10 · framework-free |
 | Deploy | GitHub Pages (static export) · GitHub Actions CI/CD |
-| Tests | Vitest (127 TS tests) · snForge (52 Cairo tests) |
+| Tests | Vitest (141 TS) · snForge (66 Cairo) · node:test (46 agent) |
 
 ---
 
@@ -172,6 +219,8 @@ then watch the position marked to the book and close to your wallet.
 |-----------|--------|
 | Cairo market contract + 2 resolvers | ✅ Complete, live on mainnet |
 | Leveraged market (FPMM, vault, keeper liquidation) | ✅ Complete in code and UI, mainnet deploy pending |
+| On-chain mandates (bounded agent delegation) | ✅ Complete, 66 Cairo tests including adversarial fuzz |
+| `veilcast-agent` runtime + skills for 3 hosts | ✅ Complete, 46 tests, verified live against mainnet |
 | Frontend: board, bets, positions, leverage, charts, dark mode | ✅ Complete |
 | SDK (`veilcast-sdk`) with pinned test vectors | ✅ Complete, market and leverage |
 | Contracts on Starknet mainnet | ✅ Market + Pragma + Committee deployed and verified |
@@ -208,7 +257,13 @@ src/
 ├── utils/discovery.ts               sections, search, status, sorting
 ├── utils/events.ts                  market history from on-chain events
 ├── app/components/client/market/    board, detail, bet, chart, positions
-└── app/components/client/leverage/  the Leverage tab: trade, positions, vault
+└── app/components/client/leverage/  the Leverage tab: trade, mandates, positions, vault
+
+agent/                               veilcast-agent: drive Veilcast headlessly from an autonomous agent
+├── cli.mjs                          18 verbs, one JSON object out, dry run by default
+├── src/pool.mjs                     the headless mainnet pool flow, every rule encoded once
+├── src/install.mjs                  host detection and the skill packs, from one source of truth
+└── skills/capabilities.json         the machine-readable capability manifest
 
 sdk/                                 veilcast-sdk: read and drive Veilcast from any TS app
 docs/                                deployment guide, architecture
@@ -231,8 +286,9 @@ cp .env.example .env.local
 npm run dev                    # http://localhost:3000
 
 # Run tests
-npm test                       # 127 TypeScript tests
-cd cairo && snforge test       # 52 Cairo contract tests
+npm test                       # 141 TypeScript tests
+cd cairo && snforge test       # 66 Cairo contract tests
+cd agent && npm test           # 46 agent runtime tests
 
 # Type check and build
 npm run typecheck

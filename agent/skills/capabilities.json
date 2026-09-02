@@ -1,0 +1,248 @@
+{
+  "schema": "veilcast-agent/capabilities@1",
+  "name": "veilcast-agent",
+  "summary": "Trade and manage positions on Veilcast, a private prediction market on Starknet's STRK20 privacy pool, headlessly. Identity is private, amounts are public. An agent can hold a bounded mandate to close a position on an owner's behalf without ever being able to redirect the money.",
+  "network": "mainnet",
+  "agentPublicKey": null,
+  "invocation": {
+    "command": "veilcast-agent",
+    "output": "one JSON object on stdout",
+    "progress": "stderr"
+  },
+  "exitCodes": {
+    "0": "ok",
+    "2": "refused: a guard said no (band not met, position healthy). Retry later, do not escalate.",
+    "3": "not configured: something is missing. Run doctor and follow the fix.",
+    "4": "bad request: fix the arguments.",
+    "5": "chain or service error.",
+    "70": "internal error."
+  },
+  "safety": {
+    "dryRunByDefault": "Every money command is a dry run unless --confirm is passed. A dry run still proves the action server-side, so it validates for free and reports the real Cairo error.",
+    "protocol": [
+      "Run the command without --confirm.",
+      "Read the JSON and check the plan is what you intended.",
+      "Re-run the identical command with --confirm only if it is."
+    ],
+    "neverDo": [
+      "Never generate, request, store or accept an owner's position private key. The runtime refuses anything that looks like one.",
+      "Never pass a private key as a command argument. Coupons are read from files.",
+      "Never retry a command that failed with exit code 2 without re-checking the chain first: the answer was no, not maybe.",
+      "Never substitute your own address for a mandate's payout target. The contract ignores it anyway."
+    ]
+  },
+  "trustBoundary": {
+    "model": "A mandate is a bounded authority the position owner grants at open: an agent key, a stop and take price band and a payout address. All three are stored on-chain and checked by the contract on every agent close.",
+    "agentCan": [
+      "read every market, price, position, mandate and the vault's solvency",
+      "quote an entry or mark a position for free, with maths that matches the contract exactly",
+      "close a position it holds a mandate for, once the live price is inside the granted band",
+      "liquidate any position that has fallen to the 8% maintenance floor, earning the 1% keeper reward"
+    ],
+    "agentCannot": [
+      "redirect a payout: an agent close pays the address pinned at open, read from storage, never from the agent's input",
+      "act outside its band: the contract compares the live marginal price to the stop and take",
+      "widen its own mandate: a mandate is write-once at open and has no setter",
+      "close a self-managed position: a zeroed agent key means no agent may ever act",
+      "impersonate the owner: an owner signature and an agent signature verify against different keys, so neither can be replayed as the other"
+    ],
+    "consequence": "A stolen agent key gets an attacker nothing but the ability to do what the owner already asked for, at a price the market actually reached, paying the owner's own address."
+  },
+  "privacy": {
+    "private": [
+      "who opened or closed a position: the contract is never told an address and the on-chain sender is the pool's relayer",
+      "the link between two positions by one person: every position is keyed by a fresh bearer coupon"
+    ],
+    "public": [
+      "every amount: margins, notionals, volumes and prices are all on-chain and readable",
+      "liquidity provision and liquidation, which are infrastructure rather than trades"
+    ],
+    "doNotClaim": "Never describe amounts as private. STRK20 gives identity privacy, not amount privacy and overclaiming it is wrong."
+  },
+  "commands": [
+    {
+      "name": "status",
+      "summary": "Endpoints, contracts, vault solvency and exactly what this agent can do. Run this first.",
+      "spends": false,
+      "args": []
+    },
+    {
+      "name": "doctor",
+      "summary": "Diagnose the setup and name the fix for anything broken.",
+      "spends": false,
+      "args": []
+    },
+    {
+      "name": "agent-key",
+      "summary": "Print this agent's public key, which an owner names in a mandate. Safe to share.",
+      "spends": false,
+      "args": []
+    },
+    {
+      "name": "markets",
+      "summary": "The live parimutuel board: questions, outcome volumes, implied probabilities and what a stake would pay. Works today with no deployment and no keys.",
+      "spends": false,
+      "args": [
+        "--stake <STRK> to quote the odds for a specific size"
+      ]
+    },
+    {
+      "name": "flow",
+      "summary": "One market's bet history from its event log: amounts and bearer keys, never addresses.",
+      "spends": false,
+      "args": [
+        "--market <id>"
+      ]
+    },
+    {
+      "name": "lev-markets",
+      "summary": "The leveraged board with live YES and NO prices.",
+      "spends": false,
+      "args": []
+    },
+    {
+      "name": "vault",
+      "summary": "Vault free collateral, backing, insurance and the solvency invariant.",
+      "spends": false,
+      "args": []
+    },
+    {
+      "name": "position",
+      "summary": "One position marked to the live book: equity, P&L, health.",
+      "spends": false,
+      "args": [
+        "--market <id>",
+        "--side <yes|no>",
+        "--key <positionPublicKey>"
+      ]
+    },
+    {
+      "name": "mandate",
+      "summary": "The authority a position carries, read from chain.",
+      "spends": false,
+      "args": [
+        "--market <id>",
+        "--side <yes|no>",
+        "--key <positionPublicKey>"
+      ]
+    },
+    {
+      "name": "quote",
+      "summary": "What an open would do, computed exactly as the contract does. Always quote first.",
+      "spends": false,
+      "args": [
+        "--market <id>",
+        "--side <yes|no>",
+        "--margin <STRK>",
+        "--leverage <3x|30000>"
+      ]
+    },
+    {
+      "name": "keeper-scan",
+      "summary": "Positions liquidatable now, best paying first.",
+      "spends": false,
+      "args": [
+        "--min-reward <STRK>"
+      ]
+    },
+    {
+      "name": "mandate-scan",
+      "summary": "Mandates this agent holds and which are firable right now.",
+      "spends": false,
+      "args": []
+    },
+    {
+      "name": "verify",
+      "summary": "Re-derive every claim in strk20.json straight from chain.",
+      "spends": false,
+      "args": [
+        "--file <path>"
+      ]
+    },
+    {
+      "name": "shield",
+      "summary": "Move STRK into the privacy pool.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--amount <STRK>",
+        "--first for a fresh account",
+        "--confirm to actually send"
+      ]
+    },
+    {
+      "name": "lev-open",
+      "summary": "Open a leveraged position, optionally granting a mandate.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--market <id>",
+        "--side <yes|no>",
+        "--margin <STRK>",
+        "--leverage <3x>",
+        "--agent-key <K> --stop <bps> --take <bps> --payout <addr> to grant a mandate",
+        "--confirm to actually send"
+      ]
+    },
+    {
+      "name": "lev-close",
+      "summary": "Close a position on the owner's terms. Needs the coupon file.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--market <id>",
+        "--side <yes|no>",
+        "--coupon <file>",
+        "--to <address>",
+        "--confirm to actually send"
+      ]
+    },
+    {
+      "name": "agent-close",
+      "summary": "Fire a mandate granted to this agent.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--market <id>",
+        "--side <yes|no>",
+        "--key <positionPublicKey>",
+        "--confirm to actually send"
+      ]
+    },
+    {
+      "name": "liquidate",
+      "summary": "Liquidate a position at the maintenance floor and earn the keeper reward.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--market <id>",
+        "--side <yes|no>",
+        "--key <positionPublicKey>",
+        "--confirm to actually send"
+      ]
+    },
+    {
+      "name": "keeper",
+      "summary": "Scan and liquidate continuously.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--min-reward <STRK>",
+        "--interval <sec>",
+        "--once",
+        "--confirm to actually send"
+      ]
+    },
+    {
+      "name": "watch",
+      "summary": "Scan and fire mandates when a band is met.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--interval <sec>",
+        "--once",
+        "--confirm to actually send"
+      ]
+    }
+  ]
+}

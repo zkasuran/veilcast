@@ -6,6 +6,11 @@
 //! `privacy_invoke` (pool-only, exactly like `VeilcastMarket`), keyed by a bearer
 //! `position_key` that also doubles as the ECDSA public key authorizing the close. Liquidation
 //! and liquidity provision are public, because they are infrastructure, not a private trade.
+//!
+//! A position may also carry a `Mandate`: a bounded authority letting an untrusted agent fire a
+//! stop or a take-profit on the owner's behalf. The mandate pins the payout address at open and
+//! the price band the agent may act in. Both are enforced on-chain, so delegating execution
+//! never delegates custody.
 
 use starknet::ContractAddress;
 use crate::interface::{OpenNoteDeposit, PayoutTarget};
@@ -69,6 +74,38 @@ pub struct LevMarket {
     pub borrowed_no: u128,
 }
 
+/// A bounded authority the owner attaches to a position when opening it, so an untrusted agent can
+/// execute a stop or a take-profit without ever being able to steal the payout or fire outside the
+/// band it was given.
+///
+/// The agent holds only its own signing key. It never holds the position key, so it cannot close on
+/// its own terms and it never names a recipient, because `payout_target` is pinned here at open
+/// and read back from storage on every agent close. Both halves of the mandate are checked
+/// on-chain, so the agent's only remaining power is to submit a close the owner already authorized
+/// at a price the market has actually reached. Losing an agent key therefore loses nothing.
+#[derive(Copy, Drop, Serde, PartialEq, Debug, starknet::Store)]
+pub struct Mandate {
+    /// ECDSA public key the agent signs an agent close with. Zero means no agent may ever act.
+    pub agent_key: felt252,
+    /// The agent may close once the side's marginal price falls to or below this (the stop). Zero
+    /// disables the stop.
+    pub stop_price_bps: u16,
+    /// The agent may close once the side's marginal price rises to or above this (the take). Zero
+    /// disables the take.
+    pub take_price_bps: u16,
+    /// Where an agent close must pay. Pinned at open so the agent cannot redirect it. An agent
+    /// close always pays an address, never an open note, because the note id is chosen while the
+    /// transaction is assembled and an agent could point it at a note of its own.
+    pub payout_target: ContractAddress,
+}
+
+/// A mandate that authorizes nobody, for a position the owner will manage itself.
+pub fn no_mandate() -> Mandate {
+    Mandate {
+        agent_key: 0, stop_price_bps: 0, take_price_bps: 0, payout_target: 0.try_into().unwrap(),
+    }
+}
+
 /// Open a leveraged position long `side` of `market_id`, owned by `position_key`.
 /// `margin` is the collateral the pool withdrew into this contract (checked against balance,
 /// like a bet's STAKE_NOT_FUNDED). Notional = margin * leverage_bps / 10000.
@@ -81,6 +118,8 @@ pub struct OpenInput {
     pub leverage_bps: u32,
     /// Slippage guard: the marginal price of `side` after the open must be <= this (bps).
     pub max_price_bps: u16,
+    /// The agent authority for this position. `no_mandate()` to keep it fully self-managed.
+    pub mandate: Mandate,
 }
 
 /// Close the position `(market_id, side, position_key)`. Signature by `position_key` over
@@ -95,13 +134,30 @@ pub struct CloseInput {
     pub target: PayoutTarget,
 }
 
+/// An agent closing a position it was given a mandate over. It names no target and no terms: the
+/// contract reads both from the stored `Mandate`, so this input is only a request to act now.
+#[derive(Copy, Drop, Serde, PartialEq, Debug)]
+pub struct AgentCloseInput {
+    pub market_id: u64,
+    pub side: u8,
+    pub position_key: felt252,
+    /// Signature by the mandate's `agent_key` over the same target-bound close message the owner
+    /// would sign. The verifying key differs, so an agent signature can never be replayed on the
+    /// owner path and an owner signature can never be replayed here.
+    pub signature_r: felt252,
+    pub signature_s: felt252,
+}
+
 /// The action the pool asks the leveraged market to perform, serialized variant-index-first:
-/// - `Open`:  `[0, market_id, side, position_key, margin, leverage_bps, max_price_bps]`
-/// - `Close`: `[1, market_id, side, position_key, r, s, target_variant, target_data]`
+/// - `Open`:        `[0, market_id, side, position_key, margin, leverage_bps, max_price_bps,
+///                   agent_key, stop_price_bps, take_price_bps, payout_target]`
+/// - `Close`:       `[1, market_id, side, position_key, r, s, target_variant, target_data]`
+/// - `AgentClose`:  `[2, market_id, side, position_key, r, s]`
 #[derive(Copy, Drop, Serde, PartialEq, Debug)]
 pub enum LeverageAction {
     Open: OpenInput,
     Close: CloseInput,
+    AgentClose: AgentCloseInput,
 }
 
 #[starknet::interface]
@@ -128,6 +184,8 @@ pub trait ILeveragedMarket<TState> {
 
     fn get_market(self: @TState, market_id: u64) -> LevMarket;
     fn get_position(self: @TState, market_id: u64, side: u8, position_key: felt252) -> Position;
+    /// The agent authority attached to a position, else a zeroed mandate if it is self-managed.
+    fn get_mandate(self: @TState, market_id: u64, side: u8, position_key: felt252) -> Mandate;
     /// Marginal price of `side` in basis points.
     fn price_bps(self: @TState, market_id: u64, side: u8) -> u16;
     /// `(value, equity, health_bps)`; `health = equity * 10000 / notional`. A position with
@@ -167,6 +225,10 @@ pub mod errors {
     pub const NO_POSITION: felt252 = 'NO_POSITION';
     pub const HEALTHY: felt252 = 'HEALTHY';
     pub const BAD_CLOSE_SIGNATURE: felt252 = 'BAD_CLOSE_SIGNATURE';
+    pub const NO_MANDATE: felt252 = 'NO_MANDATE';
+    pub const BAD_MANDATE: felt252 = 'BAD_MANDATE';
+    pub const ZERO_MANDATE_TARGET: felt252 = 'ZERO_MANDATE_TARGET';
+    pub const MANDATE_NOT_MET: felt252 = 'MANDATE_NOT_MET';
     pub const ZERO_RECIPIENT: felt252 = 'ZERO_RECIPIENT';
     pub const OVERFLOW: felt252 = 'OVERFLOW';
 }
