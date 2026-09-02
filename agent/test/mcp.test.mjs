@@ -60,7 +60,11 @@ test("confirm is never required, because a dry run is the default", () => {
 });
 
 test("every tool that spends says so in its description", () => {
-    const spenders = ["shield", "bet", "lev_open", "agent_close", "liquidate"];
+    const spenders = [
+        "shield", "bet", "lev_open", "agent_close", "liquidate",
+        "lp_add", "lp_remove", "lev_create", "lev_resolve", "lev_void",
+        "resolve_market", "void_market", "collect_fee",
+    ];
     for (const tool of toolList()) {
         const shouldSpend = spenders.includes(tool.name);
         assert.equal(

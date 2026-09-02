@@ -427,8 +427,6 @@ pub mod LeveragedMarket {
             let amount = mul_div(lp_shares, self.vault_capital.read(), total);
             (amount, self.vault_free.read() >= amount)
         }
-        // PLACEHOLDER_LEVIMPL2
-
     }
 
     fn mul_div(a: u128, b: u128, d: u128) -> u128 {
@@ -703,7 +701,5 @@ pub mod LeveragedMarket {
                 );
             self.payout(PayoutTarget::Address(mandate.payout_target), equity)
         }
-        // PLACEHOLDER_LEVCLOSE
-
     }
 }

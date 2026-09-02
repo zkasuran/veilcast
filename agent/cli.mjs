@@ -45,6 +45,14 @@ Money (dry run by default, add --confirm to send):
   lev-close  --market --side --coupon FILE --to ADDR
   agent-close --market --side --key      fire a mandate granted to this agent
   liquidate  --market --side --key       liquidate a position at the maintenance floor
+  lp-add     --amount STRK               provide vault collateral and receive shares
+  lp-remove  --shares N                  burn shares for a slice of free collateral
+  lev-create --liquidity STRK [--days N] open a leveraged market, seeded from the vault
+  lev-resolve --market --side            settle a market on its winning side (resolver only)
+  lev-void   --market                    cancel a market, refunding every margin (resolver only)
+  resolve-market --market --outcome      settle a parimutuel market (resolver only, after close)
+  void-market --market                   refund every stake (resolver; anyone 30d after close)
+  collect-fee --market                   sweep a resolved market's fee to its fixed recipient
   keeper     [--min-reward STRK] [--once]  scan and liquidate, continuously
   watch      [--interval SEC] [--once]     scan and fire mandates when a band is met
 
@@ -112,6 +120,14 @@ const HANDLERS = {
     "lev-close": commands.levClose,
     "agent-close": commands.agentClose,
     liquidate: commands.liquidate,
+    "lp-add": commands.lpAdd,
+    "lp-remove": commands.lpRemove,
+    "lev-create": commands.levCreate,
+    "lev-resolve": commands.levResolve,
+    "lev-void": commands.levVoid,
+    "resolve-market": commands.resolveMarket,
+    "void-market": commands.voidMarket,
+    "collect-fee": commands.collectFee,
     keeper: commands.keeper,
     watch: commands.watch,
 };

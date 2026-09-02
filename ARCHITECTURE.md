@@ -20,7 +20,7 @@ graph TB
     end
 
     subgraph Agent["Any machine (an agent)"]
-        CLI[veilcast-agent<br/>23 verbs + MCP, JSON out]
+        CLI[veilcast-agent<br/>31 verbs + MCP, JSON out]
         AgentKey[(agent key<br/>mode 0600)]
         OHTTP[OHTTP proving<br/>and discovery]
     end

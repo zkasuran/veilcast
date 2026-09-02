@@ -574,7 +574,6 @@ function PositionsView({ board, strk20, onDone }: { board: LevMarketView[]; strk
         </div>
     );
 }
-// PLACEHOLDER_VIEWS
 
 /// Provide or withdraw vault liquidity and seed a new leveraged market from it. The vault is the
 /// counterparty every position borrows from; its free collateral caps the leverage it can lend, and

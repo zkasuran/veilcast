@@ -64,7 +64,6 @@ export function positionStatus(view, outcome, stake, now = Math.floor(Date.now()
     if (view.state === "Resolved") return outcome === view.winningOutcome ? "won" : "lost";
     return now < view.closeAt ? "live" : "closed";
 }
-// PLACEHOLDER_MARKET
 
 /// Decode `get_market_views` from raw felts.
 ///

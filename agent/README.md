@@ -189,6 +189,14 @@ Money, dry run by default:
 | `lev-close --market --side --coupon FILE --to ADDR` | close on the owner's own terms |
 | `agent-close --market --side --key` | fire a mandate granted to this agent |
 | `liquidate --market --side --key` | liquidate at the maintenance floor, earning the keeper reward |
+| `lp-add --amount STRK` | provide vault collateral and receive shares |
+| `lp-remove --shares N` | burn shares for a slice of free collateral |
+| `lev-create --liquidity STRK [--days N]` | open a leveraged market, seeded from the vault |
+| `lev-resolve --market --side` | settle a leveraged market (resolver only) |
+| `lev-void --market` | cancel a leveraged market, refunding every margin |
+| `resolve-market --market --outcome` | settle a parimutuel market (resolver only) |
+| `void-market --market` | refund every stake. Resolver any time, anyone 30 days after the close |
+| `collect-fee --market` | sweep a resolved market's fee to its fixed recipient |
 | `keeper [--min-reward] [--interval]` | scan and liquidate continuously |
 | `watch [--interval]` | scan and fire mandates when a band is met |
 

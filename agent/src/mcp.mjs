@@ -106,6 +106,36 @@ const ARGS = {
         key: { type: "string" },
         confirm: CONFIRM_FIELD,
     },
+    "lp-add": {
+        amount: { type: "string", description: "Collateral to provide, in STRK." },
+        confirm: CONFIRM_FIELD,
+    },
+    "lp-remove": {
+        shares: { type: "string", description: "Vault shares to burn. Not STRK: read vault-lp first." },
+        confirm: CONFIRM_FIELD,
+    },
+    "lev-create": {
+        liquidity: { type: "string", description: "AMM depth drawn from free vault collateral, in STRK." },
+        days: { type: "number", description: "Days until the market closes. Defaults to 7." },
+        resolver: { type: "string", description: "Who settles it. Defaults to the funding account." },
+        confirm: CONFIRM_FIELD,
+    },
+    "lev-resolve": {
+        market: { type: "integer" },
+        side: { type: "string", enum: ["yes", "no"], description: "The winning side." },
+        confirm: CONFIRM_FIELD,
+    },
+    "lev-void": {
+        market: { type: "integer" },
+        confirm: CONFIRM_FIELD,
+    },
+    "resolve-market": {
+        market: { type: "integer" },
+        outcome: { type: "integer", description: "Index of the winning outcome, from the markets tool." },
+        confirm: CONFIRM_FIELD,
+    },
+    "void-market": { market: { type: "integer" }, confirm: CONFIRM_FIELD },
+    "collect-fee": { market: { type: "integer" }, confirm: CONFIRM_FIELD },
 };
 
 /// Verbs deliberately withheld from MCP, with the reason.
@@ -155,9 +185,16 @@ const REQUIRED = {
     "lev-open": ["market", "side", "margin", "leverage"],
     "agent-close": ["market", "side", "key"],
     liquidate: ["market", "side", "key"],
+    "lp-add": ["amount"],
+    "lp-remove": ["shares"],
+    "lev-create": ["liquidity"],
+    "lev-resolve": ["market", "side"],
+    "lev-void": ["market"],
+    "resolve-market": ["market", "outcome"],
+    "void-market": ["market"],
+    "collect-fee": ["market"],
 };
 
-/// PLACEHOLDER_MCP
 
 /// Resources: the documents a host can read once and keep, rather than re-deriving from tool calls.
 ///
@@ -322,6 +359,14 @@ const HANDLERS = {
     "lev-open": commands.levOpen,
     "agent-close": commands.agentClose,
     liquidate: commands.liquidate,
+    "lp-add": commands.lpAdd,
+    "lp-remove": commands.lpRemove,
+    "lev-create": commands.levCreate,
+    "lev-resolve": commands.levResolve,
+    "lev-void": commands.levVoid,
+    "resolve-market": commands.resolveMarket,
+    "void-market": commands.voidMarket,
+    "collect-fee": commands.collectFee,
 };
 
 /// bigint is not JSON-serializable and every amount here is one. Decimal strings are lossless.

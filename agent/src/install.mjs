@@ -180,6 +180,32 @@ export function commandCatalog() {
             "--side <yes|no>",
             "--key <positionPublicKey>",
         ]),
+        write("lp-add", "Provide collateral to the vault and receive shares. Public by design: liquidity is the market's plumbing rather than anyone's trade. The allowance is a separate earlier transaction, shown in the dry run.", [
+            "--amount <STRK>",
+        ]),
+        write("lp-remove", "Burn vault shares for a pro-rata slice of free collateral. Refuses locally when the holding is too small or the vault cannot pay yet, so a doomed withdrawal costs no gas.", [
+            "--shares <N>",
+        ]),
+        write("lev-create", "Open a leveraged market, seeding an even book from the vault. The caller becomes its resolver, which is an obligation: a market nobody settles strands every position in it.", [
+            "--liquidity <STRK>",
+            "--days <N> until close, default 7",
+            "--resolver <address> to name someone else",
+        ]),
+        write("lev-resolve", "Settle a market on its winning side. Resolver only, once the close has passed.", [
+            "--market <id>",
+            "--side <yes|no>",
+        ]),
+        write("lev-void", "Cancel a market: every position reclaims its margin and the vault reclaims its liquidity. Resolver only.", [
+            "--market <id>",
+        ]),
+        write("resolve-market", "Settle a parimutuel market on its winning outcome. Resolver only, once the close has passed.", [
+            "--market <id>",
+            "--outcome <index>",
+        ]),
+        write("void-market", "Void a parimutuel market so every stake is refundable. The resolver may do it any time; anyone else must wait 30 days past the close, which stops a vanished resolver stranding the pot.", ["--market <id>"]),
+        write("collect-fee", "Sweep a resolved market's accrued fee to the recipient fixed in storage at creation. Anyone may call it: there is nothing to redirect.", [
+            "--market <id>",
+        ]),
         write("keeper", "Scan and liquidate continuously.", ["--min-reward <STRK>", "--interval <sec>", "--once"]),
         write("watch", "Scan and fire mandates when a band is met.", ["--interval <sec>", "--once"]),
     ];

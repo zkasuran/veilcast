@@ -109,7 +109,6 @@ $SN declare --contract-name LeveragedMarket --network "$NET" || true
 CLASS=$(scarb build >/dev/null 2>&1; \
   node -e 'const{hash,json}=require("starknet");const fs=require("fs");const s=json.parse(fs.readFileSync("target/dev/veilcast_LeveragedMarket.contract_class.json","utf8"));console.log(hash.computeContractClassHash(s))')
 echo "CLASS=$CLASS"
-# PLACEHOLDER_DEPLOY
 echo "==> deploy LeveragedMarket(pool, token)"
 LEV=$($SN deploy --network "$NET" --class-hash "$CLASS" --constructor-calldata "$POOL" "$TOKEN" \
       | tee /dev/stderr | grep -oE 'contract_address: 0x[0-9a-fA-F]+' | grep -oE '0x[0-9a-fA-F]+')

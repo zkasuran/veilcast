@@ -126,7 +126,6 @@ function requireFunding(args) {
 function isConfirmed(args) {
     return args.confirm === true || args.confirm === "true";
 }
-// PLACEHOLDER_READS
 
 /// Where this agent stands: what it is pointed at, whether the services answer, what it may do.
 ///
@@ -366,7 +365,6 @@ function keyStatus(config) {
         return { present: false };
     }
 }
-// PLACEHOLDER_MARKETS
 
 /// The parimutuel board, fully decoded: questions, outcome labels, volumes, implied probabilities and
 /// what a stake would pay. Amounts and odds are public by design, so this needs nothing but an RPC.
@@ -858,7 +856,6 @@ async function levMarketForArg(config, value) {
     }
     return found;
 }
-// PLACEHOLDER_WRITES
 
 /// Move STRK into the pool. `--first` for an account that has never used the pool.
 ///
@@ -1199,7 +1196,382 @@ export async function liquidate({ config, args }) {
         `Liquidated. Keeper reward about ${formatStrk(reward)} STRK to ${funding.address}.`
     );
 }
-// PLACEHOLDER_LOOPS
+
+/// Send one ordinary (non-pool) invoke from the funding account.
+///
+/// Liquidity, market creation and settlement are public by design: they are the market's plumbing rather
+/// than anyone's trade, so they carry no proof and need no pool round trip. Factored out because five
+/// verbs do exactly the same three things. A fifth copy of the submit dance is a fifth place for the
+/// receipt check to be forgotten.
+async function sendInvoke(config, funding, call) {
+    const { Account, RpcProvider } = await import("starknet");
+    const provider = new RpcProvider({ nodeUrl: config.rpcUrl });
+    const account = new Account({ provider, address: funding.address, signer: funding.privateKey, cairoVersion: "1" });
+    const sent = await account.execute([call]);
+    const receipt = await provider.waitForTransaction(sent.transaction_hash, { retryInterval: 3000 });
+    const status = receipt.execution_status ?? receipt.value?.execution_status;
+    // A transaction can be accepted and still have reverted. Reporting finality alone would call a
+    // revert a success, which is the single easiest way to record a false claim.
+    if (status && status !== "SUCCEEDED") {
+        const error = new Error(`Transaction ${sent.transaction_hash} reverted: ${receipt.revert_reason ?? status}`);
+        error.code = "REVERTED";
+        throw error;
+    }
+    return sent.transaction_hash;
+}
+
+/// Provide collateral to the vault and receive shares.
+///
+/// A public call on purpose: liquidity is the market's plumbing rather than anyone's trade, so it carries
+/// no proof and reveals only what the vault's own state already reveals. The allowance is a separate
+/// earlier transaction because `add_liquidity` pulls with `transfer_from`, so both are shown in the dry
+/// run rather than one surprising the caller.
+export async function lpAdd({ config, args }) {
+    requireLeverage(config, "lp-add");
+    const amount = requireAmount(args.amount, "--amount");
+    const funding = requireFunding(args);
+    const state = await vaultState(config);
+    const price = sharePrice(state.capital, state.sharesTotal);
+    // Shares are minted at the live price, so quote what this deposit buys before it is sent.
+    const shares = state.sharesTotal === 0n ? amount : (amount * state.sharesTotal) / state.capital;
+    const approve = {
+        contractAddress: config.token,
+        entrypoint: "approve",
+        calldata: [config.leverage, String(amount), "0"],
+    };
+    const call = { contractAddress: config.leverage, entrypoint: "add_liquidity", calldata: [String(amount)] };
+    if (!isConfirmed(args)) {
+        return ok(
+            "lp-add",
+            { amount, sharePrice: price, sharesExpected: shares, calls: [approve, call], submitted: false },
+            `Dry run. ${formatStrk(amount)} STRK would mint about ${formatStrk(shares)} shares at ${formatStrk(price)} STRK each. Add --confirm to send.`
+        );
+    }
+    const approveTx = await sendInvoke(config, funding, approve);
+    const txHash = await sendInvoke(config, funding, call);
+    const after = await vaultShares(config, funding.address);
+    return ok(
+        "lp-add",
+        { amount, sharesExpected: shares, sharesNow: after, approveTx, txHash, submitted: true },
+        `Provided ${formatStrk(amount)} STRK. This address now holds ${formatStrk(after)} shares.`
+    );
+}
+
+/// Burn vault shares for a pro-rata slice of free collateral.
+///
+/// Refuses locally what the contract would refuse anyway, so a doomed withdrawal costs no gas: more
+/// shares than are held, else a payout larger than the free collateral. The second is the one that
+/// surprises people, because the shares are still worth their full slice; the vault simply cannot pay it
+/// while the collateral is lent out or seeded into a market.
+export async function lpRemove({ config, args }) {
+    requireLeverage(config, "lp-remove");
+    const shares = requireAmount(args.shares ?? args.amount, "--shares");
+    const funding = requireFunding(args);
+    const held = await vaultShares(config, funding.address);
+    if (held < shares) {
+        return fail(
+            "lp-remove",
+            EXIT.refused,
+            "INSUFFICIENT_SHARES",
+            `This address holds ${formatStrk(held)} shares, fewer than the ${formatStrk(shares)} asked for.`,
+            { hint: "Burn that many or fewer. veilcast-agent vault-lp --lp <address> reports the holding." }
+        );
+    }
+    const quote = await quoteRemoveLiquidity(config, shares);
+    if (!quote.payable) {
+        return fail(
+            "lp-remove",
+            EXIT.refused,
+            "NOT_PAYABLE",
+            `Those shares are worth ${formatStrk(quote.amount)} STRK, but the vault cannot pay that right now.`,
+            {
+                hint: "The collateral behind them is lent out or seeded into a market. Withdraw a smaller slice. Waiting for positions to close frees it.",
+            }
+        );
+    }
+    const call = { contractAddress: config.leverage, entrypoint: "remove_liquidity", calldata: [String(shares)] };
+    if (!isConfirmed(args)) {
+        return ok(
+            "lp-remove",
+            { shares, quote, call, submitted: false },
+            `Dry run. Would pay ${formatStrk(quote.amount)} STRK. Add --confirm to send.`
+        );
+    }
+    const txHash = await sendInvoke(config, funding, call);
+    return ok(
+        "lp-remove",
+        { shares, paid: quote.amount, txHash, sharesNow: await vaultShares(config, funding.address), submitted: true },
+        `Burned ${formatStrk(shares)} shares for ${formatStrk(quote.amount)} STRK.`
+    );
+}
+
+/// Open a leveraged market, seeding an even book from the vault.
+///
+/// The caller becomes its resolver, which is an obligation rather than a privilege: a market nobody
+/// settles strands every position in it. The dry run says so. `lev-resolve` or `lev-void` is how the
+/// obligation is met.
+export async function levCreate({ config, args }) {
+    requireLeverage(config, "lev-create");
+    const liquidity = requireAmount(args.liquidity ?? args.seed, "--liquidity");
+    const days = Number(args.days ?? 7);
+    if (!Number.isFinite(days) || days <= 0) {
+        const error = new Error(`--days must be a positive number of days, got "${args.days}".`);
+        error.code = "BAD_DAYS";
+        throw error;
+    }
+    const funding = requireFunding(args);
+    const resolver = args.resolver ?? funding.address;
+    const state = await vaultState(config);
+    if (state.free < liquidity) {
+        return fail(
+            "lev-create",
+            EXIT.refused,
+            "INSUFFICIENT_VAULT",
+            `The vault has ${formatStrk(state.free)} STRK free, less than the ${formatStrk(liquidity)} asked for.`,
+            { hint: "Provide liquidity first: veilcast-agent lp-add --amount <STRK> --confirm" }
+        );
+    }
+    const closeAt = Math.floor(Date.now() / 1000) + Math.round(days * 86_400);
+    const call = {
+        contractAddress: config.leverage,
+        entrypoint: "create_market",
+        calldata: [resolver, String(closeAt), String(liquidity)],
+    };
+    if (!isConfirmed(args)) {
+        return ok(
+            "lev-create",
+            { resolver, closeAt, closeAtIso: new Date(closeAt * 1000).toISOString(), liquidity, call, submitted: false },
+            `Dry run. Would open a market closing ${new Date(closeAt * 1000).toISOString()} with ${formatStrk(liquidity)} STRK of depth. You would be its resolver, so you must settle it after the close. Add --confirm to send.`
+        );
+    }
+    const txHash = await sendInvoke(config, funding, call);
+    const marketId = (await levMarketCount(config)) - 1;
+    return ok(
+        "lev-create",
+        { marketId, resolver, closeAt, liquidity, txHash, submitted: true },
+        `Market ${marketId} is open until ${new Date(closeAt * 1000).toISOString()}. You are its resolver: settle it with lev-resolve once the outcome is known.`
+    );
+}
+
+/// Settle a market on its winning side. Resolver only, once the close has passed.
+export async function levResolve({ config, args }) {
+    requireLeverage(config, "lev-resolve");
+    const side = parseSide(args.side ?? args.winner);
+    const market = await levMarketForArg(config, args.market);
+    const funding = requireFunding(args);
+    if (market.state !== "Open") {
+        return fail("lev-resolve", EXIT.refused, "NOT_OPEN", `Market ${market.id} is already ${market.state}.`);
+    }
+    const now = Math.floor(Date.now() / 1000);
+    if (now < market.closeAt) {
+        return fail(
+            "lev-resolve",
+            EXIT.refused,
+            "NOT_CLOSED",
+            `Market ${market.id} closes ${new Date(market.closeAt * 1000).toISOString()}, which has not happened yet.`,
+            { hint: "The contract checks the timestamp, so this would revert. Wait for the close." }
+        );
+    }
+    if (BigInt(market.resolver) !== BigInt(funding.address)) {
+        return fail(
+            "lev-resolve",
+            EXIT.refused,
+            "NOT_RESOLVER",
+            `Market ${market.id} names ${market.resolver} as its resolver, not this account.`,
+            { hint: "Only that address can settle it. The contract enforces this." }
+        );
+    }
+    const call = {
+        contractAddress: config.leverage,
+        entrypoint: "resolve",
+        calldata: [String(market.id), String(side)],
+    };
+    if (!isConfirmed(args)) {
+        return ok(
+            "lev-resolve",
+            { marketId: market.id, winningSide: side, call, submitted: false },
+            `Dry run. Would settle market ${market.id} with ${side === SIDE_YES ? "YES" : "NO"} winning, so those shares redeem at one and the other side at zero. Add --confirm to send.`
+        );
+    }
+    const txHash = await sendInvoke(config, funding, call);
+    return ok(
+        "lev-resolve",
+        { marketId: market.id, winningSide: side, txHash, submitted: true },
+        `Market ${market.id} resolved. Holders of the winning side can now close for their full share value.`
+    );
+}
+
+/// Cancel a market: every position reclaims its margin and the vault reclaims its liquidity.
+///
+/// The honest escape hatch for a question that turned out to be unresolvable. Nobody wins and nobody
+/// loses, which is why it is resolver-only.
+export async function levVoid({ config, args }) {
+    requireLeverage(config, "lev-void");
+    const market = await levMarketForArg(config, args.market);
+    const funding = requireFunding(args);
+    if (market.state !== "Open") {
+        return fail("lev-void", EXIT.refused, "NOT_OPEN", `Market ${market.id} is already ${market.state}.`);
+    }
+    if (BigInt(market.resolver) !== BigInt(funding.address)) {
+        return fail(
+            "lev-void",
+            EXIT.refused,
+            "NOT_RESOLVER",
+            `Market ${market.id} names ${market.resolver} as its resolver, not this account.`
+        );
+    }
+    const call = { contractAddress: config.leverage, entrypoint: "void", calldata: [String(market.id)] };
+    if (!isConfirmed(args)) {
+        return ok(
+            "lev-void",
+            { marketId: market.id, call, submitted: false },
+            `Dry run. Would void market ${market.id}: every position reclaims its margin and the vault reclaims its ${formatStrk(market.liquidity)} STRK of depth. Add --confirm to send.`
+        );
+    }
+    const txHash = await sendInvoke(config, funding, call);
+    return ok("lev-void", { marketId: market.id, txHash, submitted: true }, `Market ${market.id} voided.`);
+}
+
+/// Settle a parimutuel market on its winning outcome. Resolver only, once the close has passed.
+///
+/// The market's own resolver is whoever it named at creation, which may be an oracle contract rather than
+/// an address, so this refuses early when the caller is not it: the contract checks the same thing and
+/// reverting there costs gas to learn what a free read already knows.
+export async function resolveMarket({ config, args }) {
+    const outcome = Number(args.outcome ?? args.winner);
+    if (!Number.isInteger(outcome) || outcome < 0) {
+        const error = new Error(`--outcome must be a non-negative outcome index, got "${args.outcome}".`);
+        error.code = "BAD_OUTCOME";
+        throw error;
+    }
+    const marketId = Number(args.market);
+    if (!Number.isInteger(marketId) || marketId < 0) {
+        const error = new Error(`--market must be a market id, got "${args.market}".`);
+        error.code = "BAD_MARKET";
+        throw error;
+    }
+    const funding = requireFunding(args);
+    const view = await market(config, marketId);
+    if (view.state !== "Open") {
+        return fail("resolve-market", EXIT.refused, "NOT_OPEN", `Market ${marketId} is already ${view.state}.`);
+    }
+    if (Math.floor(Date.now() / 1000) < view.closeAt) {
+        return fail(
+            "resolve-market",
+            EXIT.refused,
+            "NOT_CLOSED",
+            `Market ${marketId} closes ${new Date(view.closeAt * 1000).toISOString()}, which has not happened yet.`
+        );
+    }
+    if (outcome >= view.outcomes.length) {
+        return fail(
+            "resolve-market",
+            EXIT.refused,
+            "NO_SUCH_OUTCOME",
+            `Market ${marketId} has ${view.outcomes.length} outcomes, so ${outcome} is out of range.`
+        );
+    }
+    const call = {
+        contractAddress: config.market,
+        entrypoint: "resolve",
+        calldata: [String(marketId), String(outcome)],
+    };
+    if (!isConfirmed(args)) {
+        return ok(
+            "resolve-market",
+            { marketId, outcome, label: view.outcomes[outcome]?.label, call, submitted: false },
+            `Dry run. Would settle market ${marketId} with "${view.outcomes[outcome]?.label}" winning, so its backers split the whole pot. Add --confirm to send.`
+        );
+    }
+    const txHash = await sendInvoke(config, funding, call);
+    return ok(
+        "resolve-market",
+        { marketId, outcome, txHash, submitted: true },
+        `Market ${marketId} resolved. Winning coupons can now collect.`
+    );
+}
+
+/// Void a parimutuel market, refunding every stake.
+///
+/// Not resolver-only, which matters: the resolver may void an open market at any time, while
+/// anyone else must wait until 30 days past the close. That grace window is the anti-abandonment escape
+/// hatch, so a resolver who vanishes cannot strand the pot forever. Both conditions are checked here
+/// rather than left to revert as VOID_TOO_EARLY, since a free read already knows the answer.
+export async function voidMarket({ config, args }) {
+    const marketId = Number(args.market);
+    if (!Number.isInteger(marketId) || marketId < 0) {
+        const error = new Error(`--market must be a market id, got "${args.market}".`);
+        error.code = "BAD_MARKET";
+        throw error;
+    }
+    const funding = requireFunding(args);
+    const view = await market(config, marketId);
+    if (view.state !== "Open") {
+        return fail("void-market", EXIT.refused, "NOT_OPEN", `Market ${marketId} is already ${view.state}.`);
+    }
+    const VOID_GRACE = 2_592_000; // 30 days, mirroring VOID_GRACE in cairo/src/market.cairo
+    const isResolver = BigInt(view.resolver) === BigInt(funding.address);
+    const openToAnyoneAt = view.closeAt + VOID_GRACE;
+    if (!isResolver && Math.floor(Date.now() / 1000) < openToAnyoneAt) {
+        return fail(
+            "void-market",
+            EXIT.refused,
+            "VOID_TOO_EARLY",
+            `Market ${marketId} names ${view.resolver} as its resolver. Anyone else may only void it after ${new Date(openToAnyoneAt * 1000).toISOString()}.`,
+            {
+                hint: "That grace window exists so a resolver who vanishes cannot strand the pot. Until then, only the resolver can void.",
+            }
+        );
+    }
+    const call = { contractAddress: config.market, entrypoint: "void", calldata: [String(marketId)] };
+    if (!isConfirmed(args)) {
+        return ok(
+            "void-market",
+            { marketId, pot: view.pot, call, submitted: false },
+            `Dry run. Would void market ${marketId}, so every stake in its ${formatStrk(view.pot)} STRK pot is refundable. Add --confirm to send.`
+        );
+    }
+    const txHash = await sendInvoke(config, funding, call);
+    return ok("void-market", { marketId, txHash, submitted: true }, `Market ${marketId} voided. Every stake is refundable.`);
+}
+
+/// Sweep a resolved market's accrued fee to its fee recipient.
+///
+/// Anyone may call it: the destination is fixed in storage at creation, so there is nothing to redirect
+/// and no reason to gate who pays the gas.
+export async function collectFee({ config, args }) {
+    const marketId = Number(args.market);
+    if (!Number.isInteger(marketId) || marketId < 0) {
+        const error = new Error(`--market must be a market id, got "${args.market}".`);
+        error.code = "BAD_MARKET";
+        throw error;
+    }
+    const funding = requireFunding(args);
+    const view = await market(config, marketId);
+    if (view.feeOwed === 0n) {
+        return fail(
+            "collect-fee",
+            EXIT.refused,
+            "NO_FEE_OWED",
+            `Market ${marketId} owes no fee, so this would revert.`,
+            { hint: "A fee accrues on resolve and is swept once. This one is either unresolved or already swept." }
+        );
+    }
+    const call = { contractAddress: config.market, entrypoint: "collect_fee", calldata: [String(marketId)] };
+    if (!isConfirmed(args)) {
+        return ok(
+            "collect-fee",
+            { marketId, feeOwed: view.feeOwed, recipient: view.feeRecipient, call, submitted: false },
+            `Dry run. Would sweep ${formatStrk(view.feeOwed)} STRK to ${view.feeRecipient}, the address fixed in storage when the market opened. Add --confirm to send.`
+        );
+    }
+    const txHash = await sendInvoke(config, funding, call);
+    return ok(
+        "collect-fee",
+        { marketId, swept: view.feeOwed, recipient: view.feeRecipient, txHash, submitted: true },
+        `Swept ${formatStrk(view.feeOwed)} STRK to ${view.feeRecipient}.`
+    );
+}
 
 /// The keeper loop: scan, liquidate what pays, repeat.
 ///

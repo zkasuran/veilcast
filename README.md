@@ -54,6 +54,7 @@
 | **RFP match** | [RFP-07: prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
 | **Live on mainnet** | Market, Pragma resolver and committee resolver deployed. **Twelve pool transactions, three of which score** under the program's rule that a transaction must carry an event from a contract we list. Every claim re-derivable from chain by running one command |
 | **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money**, fuzzed and devnet-rehearsed, awaiting its mainnet declare |
+| **Complete surface** | Every write entrypoint on both contracts is reachable from both clients: betting, leverage, mandates, liquidity, market creation and settlement. Nothing is browser-only and nothing is agent-only |
 | **Agent-drivable** | The only entry in the field an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes, plus an **MCP server** so a browser host with no shell (claude.ai, an IDE panel) can trade and take alerts without leaving the editor |
 | **Verify us, do not trust us** | `node agent/cli.mjs verify` re-derives every recorded transaction and class hash straight from chain, then exits non-zero if one fails |
 | **Tests** | **318 green.** 69 Cairo with zero warnings (12 of them fuzz), 145 TypeScript, 104 agent runtime |
@@ -457,7 +458,7 @@ exist: one walks the event log, the other walks blocks, which is the only way to
 | Layer | Technology |
 |---|---|
 | Contracts | Cairo 2.20 · Scarb · Starknet Foundry · **69 tests, 12 of them fuzz, zero warnings** |
-| Agent runtime | Node 20, one dependency (starknet.js) · **104 tests** · 23 verbs plus an MCP server · JSON out, dry run by default |
+| Agent runtime | Node 20, one dependency (starknet.js) · **104 tests** · 31 verbs plus an MCP server · JSON out, dry run by default |
 | Frontend | Next.js 16 · React 19 · CSS Modules · dark and light |
 | SDK | TypeScript · starknet.js 10 · framework-free · **145 tests** shared with the app |
 | Privacy | STRK20 pool · Wallet API in the browser · OHTTP proving and discovery headlessly |
@@ -506,7 +507,7 @@ cairo/scripts/
 └── post-deploy.sh             records, verifies and wires the site, sending nothing
 
 agent/                         veilcast-agent: drive Veilcast from an autonomous agent
-├── cli.mjs                    23 verbs, one JSON object out, dry run unless --confirm
+├── cli.mjs                    31 verbs, one JSON object out, dry run unless --confirm
 ├── src/pool.mjs               the headless mainnet pool flow, every hard-won rule once
 ├── src/market.mjs             the parimutuel board decoded from raw felts, no ABI to drift
 ├── src/pricing.mjs            the FPMM and leverage maths, mirroring Cairo felt for felt
