@@ -1,17 +1,26 @@
 {
   "name": "veilcast-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Drive Veilcast, the private prediction market on Starknet's STRK20 pool, from an autonomous agent. No browser, no wallet extension, no human in the loop.",
   "license": "MIT",
   "type": "module",
-  "bin": { "veilcast-agent": "./cli.mjs" },
+  "bin": {
+    "veilcast-agent": "./cli.mjs"
+  },
   "main": "./src/index.mjs",
   "exports": {
     ".": "./src/index.mjs",
     "./skills": "./skills/capabilities.json"
   },
-  "files": ["cli.mjs", "src", "skills", "README.md"],
-  "engines": { "node": ">=20" },
+  "files": [
+    "cli.mjs",
+    "src",
+    "skills",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "doctor": "node cli.mjs doctor"
