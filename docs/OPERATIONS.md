@@ -49,7 +49,8 @@ cost rather than a quote.
 | Account deploy | ~0.08 STRK | one-time per account |
 | Pool register plus setup plus first deposit | ~43 STRK | one-time per account, unavoidable, atomic |
 | Later deposit | ~0.04 STRK | cheap once the account is set up |
-| Private bet through the pool | ~3.1 to 3.7 STRK | the pool verifies a STARK proof on-chain |
+| Private bet through the pool | ~2.8 STRK realized, ~4 STRK reserved | the pool verifies a STARK proof on-chain |
+| Opening a market | ~0.55 STRK each | ordinary invoke, no proof |
 | Leveraged open through the pool | same order | same proof path |
 | Liquidation | ordinary transaction gas | no proof, so far cheaper |
 | Declaring a contract class | ~8 STRK small, 35 to 60 STRK large | the real budget driver on deploys |
@@ -208,6 +209,27 @@ was sent.
 
 **A dry run reports a Cairo felt.** Good: that is the point. The prover simulated server-side and
 told you exactly why the action would fail before you spent gas. The `hint` field carries the fix.
+
+**A deposit fails with `Insufficient ERC20 allowance`.** The pool has no allowance to pull the token.
+A pool action is a single proof-carrying call, so the approve cannot ride inside it: it has to be its own
+ordinary transaction, sent first. `cairo/scripts/approve.mjs` does exactly that. This fails at estimate
+time, so nothing is spent. It recurs whenever the allowance is drained by earlier deposits.
+
+**A pool action reverts with `Insufficient ERC20 balance` or `Insufficient fee token balance` while the
+balance looks sufficient.** The account must be able to *reserve* the padded fee bound, not merely pay
+the realized fee. Measured on 2026-09-02: a bet whose realized fee was 2.76 STRK was rejected at a
+balance of 2.52, then again at 0.89 after an earlier attempt. This is the same trap as the declare
+reserve above, at a smaller scale. Hold roughly 4 STRK of headroom per pool action beyond the stake.
+
+**A bet reverts with `NOTE_NOT_FOUND`.** The account has no spendable note. `autoSelectNotes: "all"`
+consumes the whole note, so a second bet needs a second deposit rather than a second selection from the
+first. Shield again, wait for the note to index, then bet.
+
+**A run dies after submitting and you do not have the hash.** The transaction is on chain regardless of
+whether the script lived to print it. Recover it from the log rather than guessing:
+`cairo/scripts/recent.mjs <account>` walks the pool's and the market's event logs and reports which of
+your transactions carried both. `cairo/scripts/sent.mjs <account>` walks blocks directly, which is the
+only way to see a *reverted* transaction, since a revert emits no events at all.
 
 **A deposit fails with `INDEX_NOT_SEQUENTIAL`.** The previous note is not indexed yet. The runtime
 polls discovery for you, but under load you may need to wait longer. Retry the same command.

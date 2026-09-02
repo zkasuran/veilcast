@@ -24,6 +24,7 @@ import {
     levPosition,
     proveBlock,
     receiptFacts,
+    countsUnderProgramRule,
     tokenBalance,
     vaultState,
 } from "./chain.mjs";
@@ -1170,22 +1171,34 @@ export async function verify({ config, args }) {
         });
     }
     const manifest = JSON.parse(readFileSync(file, "utf8"));
+    // The program's rule, applied exactly: a listed transaction must have succeeded, must have touched
+    // the pool. If the submission lists contracts it must also carry an event from one of them.
+    // Listing contracts therefore raises our own bar, so score against the list in the file rather than
+    // against the one market address the config happens to know.
+    const ourAddresses = (manifest.contracts ?? []).map((entry) => entry.address).filter(Boolean);
     const transactions = [];
     for (const txHash of manifest.transactions ?? []) {
         try {
-            const facts = await receiptFacts(config, txHash, config.market);
+            const facts = await receiptFacts(config, txHash, ourAddresses);
+            const needsOurs = ourAddresses.length > 0;
+            const counts = countsUnderProgramRule(facts, needsOurs);
             transactions.push({
                 txHash,
                 ...facts,
-                verdict: facts.succeeded && facts.poolEvent ? "PASS" : "FAIL",
-                why: facts.succeeded
-                    ? facts.poolEvent
-                        ? "succeeded and the pool emitted an event in it"
-                        : "succeeded but no pool event, so it does not count as a pool transaction"
-                    : `execution status ${facts.execution}`,
+                counts,
+                verdict: counts ? "PASS" : "FAIL",
+                why: !facts.succeeded
+                    ? `execution status ${facts.execution}`
+                    : !facts.poolEvent
+                      ? "succeeded but no pool event, so it is not a pool transaction"
+                      : counts
+                        ? needsOurs
+                            ? "succeeded, touched the pool and carried an event from a contract we list"
+                            : "succeeded and the pool emitted an event in it"
+                        : "touched the pool but carried no event from any contract we list, so it is the pool running rather than us",
             });
         } catch (error) {
-            transactions.push({ txHash, verdict: "FAIL", why: String(error.message ?? error).slice(0, 200) });
+            transactions.push({ txHash, counts: false, verdict: "FAIL", why: String(error.message ?? error).slice(0, 200) });
         }
     }
     const contracts = [];
@@ -1210,33 +1223,58 @@ export async function verify({ config, args }) {
             });
         }
     }
-    const failures = [...transactions, ...contracts].filter((row) => row.verdict !== "PASS");
+    // Two different kinds of bad news, kept apart on purpose. A recorded transaction that reverted or
+    // does not exist is a false claim in the file. One that succeeded but carries no event of ours is an
+    // honest transaction that simply does not reach the program's bar, which is a shortfall rather than a
+    // lie. Only the first kind, plus a contract whose class hash does not match, is dishonesty; the
+    // shortfall gets its own message so a judge can tell them apart at a glance.
+    const countable = transactions.filter((row) => row.counts);
+    const untrue = transactions.filter((row) => row.verdict === "FAIL" && !row.succeeded);
+    const poolOnly = transactions.filter((row) => row.succeeded && !row.counts);
+    const badContracts = contracts.filter((row) => row.verdict !== "PASS");
+    const REQUIRED = 3;
     const data = {
         file,
         network: config.network,
         pool: config.pool,
+        rule: "a transaction counts when it succeeded, the pool emitted an event in it and a contract listed in this file emitted one too",
         transactions,
         contracts,
         summary: {
             transactionsChecked: transactions.length,
             contractsChecked: contracts.length,
-            passed: transactions.length + contracts.length - failures.length,
-            failed: failures.length,
+            countable: countable.length,
+            required: REQUIRED,
+            clearsTheBar: countable.length >= REQUIRED,
+            poolOnly: poolOnly.length,
+            notOnChainOrReverted: untrue.length,
+            contractsMismatched: badContracts.length,
         },
     };
-    if (failures.length > 0) {
+    if (untrue.length > 0 || badContracts.length > 0) {
         return {
             ok: false,
             command: "verify",
             code: EXIT.chainError,
             error: "VERIFICATION_FAILED",
-            message: `${failures.length} claim(s) did not verify against chain.`,
+            message: `${untrue.length + badContracts.length} recorded claim(s) do not hold against chain.`,
             data,
+        };
+    }
+    if (countable.length < REQUIRED) {
+        return {
+            ok: false,
+            command: "verify",
+            code: EXIT.refused,
+            error: "NOT_ENOUGH_COUNTABLE",
+            message: `Every recorded claim holds, but only ${countable.length} of ${transactions.length} transaction(s) count under the program's rule and it asks for ${REQUIRED}.`,
+            data,
+            hint: "A transaction must carry an event from a contract listed in contracts[], not just a pool event. Route the action through our own contract.",
         };
     }
     return ok(
         "verify",
         data,
-        "Every recorded transaction succeeded with a pool event and every contract matches its recorded class hash. Verified against chain, not against our docs."
+        `Every recorded transaction succeeded, ${countable.length} of ${transactions.length} carry both a pool event and an event from a contract we list. Every contract matches its recorded class hash. Verified against chain, not against our docs.`
     );
 }

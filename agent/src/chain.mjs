@@ -187,24 +187,42 @@ export async function openedPositions(config, { chunkSize = 200, maxChunks = 40 
     return found;
 }
 
-/// A transaction receipt, with the two facts that matter for verifying a pool action: did it succeed,
-/// and did the pool actually emit an event in it.
+/// A transaction receipt, with the facts that decide whether it counts as this project running on
+/// mainnet: did it succeed, did the pool emit an event in it and did any contract we claim emit one
+/// too.
 ///
-/// The pool appearing in `events[].from_address` is the program's own eligibility test, so this is the
-/// check a judge would run, not a proxy for it.
-export async function receiptFacts(config, txHash, extraAddress) {
+/// The second and third parts are the program's own eligibility test rather than a proxy for it. Its
+/// rule is that a listed transaction must touch the pool. If a submission lists contracts the
+/// transaction must also carry an event from one of them, because touching the pool through someone
+/// else's contract is not our project running on mainnet. So `ours` is the address list from
+/// `strk20.json` `contracts[]`. A hit is recorded per address so a failure names which one is
+/// missing.
+export async function receiptFacts(config, txHash, ours) {
     const receipt = await rpc(config.rpcUrl, "starknet_getTransactionReceipt", [txHash]);
     const from = (receipt.events ?? []).map((event) => normalize(event.from_address));
+    const claimed = (Array.isArray(ours) ? ours : ours ? [ours] : []).filter(Boolean);
+    const emitters = claimed.filter((address) => from.includes(normalize(address)));
     return {
         txHash,
         finality: receipt.finality_status,
         execution: receipt.execution_status,
         succeeded: receipt.execution_status === "SUCCEEDED",
         poolEvent: from.includes(normalize(config.pool)),
-        ...(extraAddress ? { contractEvent: from.includes(normalize(extraAddress)) } : {}),
+        ...(claimed.length > 0 ? { contractEvent: emitters.length > 0, emitters } : {}),
         events: from.length,
         actualFee: receipt.actual_fee?.amount ?? receipt.actual_fee,
     };
+}
+
+/// Does a receipt count as this project running on mainnet?
+///
+/// The program's rule in one place, pure and testable: the transaction must have succeeded, the pool
+/// must have emitted an event in it. If the submission lists any contracts of its own then one of
+/// them must have emitted an event too. A submission that lists no contracts is held only to the first
+/// two, which is why `claimedAny` is a separate argument rather than inferred from `facts`.
+export function countsUnderProgramRule(facts, claimedAny) {
+    if (!facts?.succeeded || !facts?.poolEvent) return false;
+    return claimedAny ? facts.contractEvent === true : true;
 }
 
 /// The class hash actually deployed at an address, for verifying a recorded deployment.

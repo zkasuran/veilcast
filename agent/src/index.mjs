@@ -72,6 +72,7 @@ export {
     vaultState,
     openedPositions,
     receiptFacts,
+    countsUnderProgramRule,
     classHashAt,
 } from "./chain.mjs";
 export {
