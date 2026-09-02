@@ -20,6 +20,14 @@ export async function serve({ input = process.stdin, output = process.stdout, ar
         const next = argv[index + 1];
         args[flag.slice(2)] = next && !next.startsWith("--") ? next : true;
     }
+    // The same reason as the CLI, but sharper here: on stdio a stray byte on stdout desynchronises the
+    // host's JSON-RPC parser and the session dies with nothing to look at.
+    try {
+        const { logger } = await import("starknet");
+        logger?.setLogLevel?.("OFF");
+    } catch {
+        // A version without the logger has nothing to silence.
+    }
     const config = configFrom(args);
     // An absent key is normal: a host may only ever read. readAgentKey throws rather than returning
     // null, because for every other caller a missing key is a setup error worth naming.

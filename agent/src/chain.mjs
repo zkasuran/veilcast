@@ -189,13 +189,17 @@ export async function quoteRemoveLiquidity(config, lpShares) {
 /// so a position's identity comes straight off the keys with no data decoding needed.
 export async function openedPositions(config, { chunkSize = 200, maxChunks = 40 } = {}) {
     const wanted = hash.getSelectorFromName("PositionOpened");
+    // Never from genesis. A public RPC answers a range that wide with an empty page rather than an error,
+    // so a keeper scanning from 0 reports zero open positions and looks correct while being blind. Cost
+    // us the same lie twice: once on the parimutuel market, once here on the day the leverage deployed.
+    const fromBlock = config.leverageFromBlock ?? 0;
     const found = [];
     let continuation;
     for (let page = 0; page < maxChunks; page += 1) {
         const result = await rpc(config.rpcUrl, "starknet_getEvents", [
             {
                 address: config.leverage,
-                from_block: { block_number: 0 },
+                from_block: { block_number: fromBlock },
                 to_block: "latest",
                 keys: [[wanted]],
                 chunk_size: chunkSize,
@@ -253,6 +257,7 @@ export async function receiptFacts(config, txHash, ours) {
 ///
 /// `lp` is the first key on both events, so the filter is a key filter rather than a full scan.
 export async function liquidityHistory(config, lp, { chunkSize = 200, maxChunks = 40 } = {}) {
+    const fromBlock = config.leverageFromBlock ?? 0;
     const added = hash.getSelectorFromName("LiquidityAdded");
     const removed = hash.getSelectorFromName("LiquidityRemoved");
     const key = num.toHex(BigInt(lp));
@@ -266,7 +271,7 @@ export async function liquidityHistory(config, lp, { chunkSize = 200, maxChunks 
             const result = await rpc(config.rpcUrl, "starknet_getEvents", [
                 {
                     address: config.leverage,
-                    from_block: { block_number: 0 },
+                    from_block: { block_number: fromBlock },
                     to_block: "latest",
                     keys: [[selector], [key]],
                     chunk_size: chunkSize,

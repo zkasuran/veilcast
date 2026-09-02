@@ -19,7 +19,11 @@ export const MAINNET = {
     market: "0x036be78d67d6e94b79d3a8a7891b67871d4f17342d4c323be8f6ed469c36c6b8",
     pragmaResolver: "0x0665a23caf88a7be47db35a7b6c4ecfae7de8d51405004d579f5553a680a259b",
     committeeResolver: "0x00b0dec2742d5f7f62bdc4a7b93c5caabe17b6b9d49200d9c1c0eae8e64e6cd7",
-    leverage: "0x0",
+    leverage: "0x01912b5c0f775cc339db0cecd9b173cb6ad16f23686245ed9ac7642ad5e96774",
+    /// The block each contract was deployed in, because an event scan from genesis silently returns
+    /// nothing on a public RPC rather than erroring. Measured, not guessed: the deploy receipts.
+    marketFromBlock: 13_890_000,
+    leverageFromBlock: 14_243_113,
     /// The STRK20 proving and discovery services, reachable over OHTTP. These are the same
     /// services a STRK20-enabled wallet uses to prove a pool action; they take no API key, which
     /// is what makes a headless agent possible at all. See docs/MAINNET-HEADLESS.md.
@@ -79,6 +83,8 @@ export function resolveConfig(overrides = {}, env = process.env) {
         pragmaResolver: MAINNET.pragmaResolver,
         committeeResolver: MAINNET.committeeResolver,
         leverage: pick("leverage", MAINNET.leverage),
+        marketFromBlock: Number(pick("marketFromBlock", MAINNET.marketFromBlock)),
+        leverageFromBlock: Number(pick("leverageFromBlock", MAINNET.leverageFromBlock)),
         provingUrl: pick("provingUrl", MAINNET.provingUrl),
         discoveryUrl: pick("discoveryUrl", MAINNET.discoveryUrl),
         proveLag: Number.isFinite(proveLag) && proveLag >= 10 ? proveLag : MAINNET.proveLag,

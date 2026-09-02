@@ -20,7 +20,7 @@
   <a href="https://zkasuran.github.io/veilcast/"><img src="https://img.shields.io/badge/demo-live%20on%20mainnet-brightgreen?style=flat-square" alt="Live demo" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/contracts.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/contracts.yml?label=cairo&style=flat-square" alt="Cairo tests" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/pages.yml?label=web&style=flat-square" alt="Web build" /></a>
-  <img src="https://img.shields.io/badge/tests-318%20passing-brightgreen?style=flat-square" alt="318 tests" />
+  <img src="https://img.shields.io/badge/tests-322%20passing-brightgreen?style=flat-square" alt="322 tests" />
   <img src="https://img.shields.io/badge/agent-Claude%20Code%20%C2%B7%20openclaw%20%C2%B7%20Hermes-8b5cf6?style=flat-square" alt="Agent skills" />
   <a href="https://www.npmjs.com/package/veilcast-agent"><img src="https://img.shields.io/npm/v/veilcast-agent?style=flat-square&label=veilcast-agent" alt="veilcast-agent on npm" /></a>
   <a href="https://www.npmjs.com/package/veilcast-sdk"><img src="https://img.shields.io/npm/v/veilcast-sdk?style=flat-square&label=veilcast-sdk" alt="veilcast-sdk on npm" /></a>
@@ -52,12 +52,12 @@
 |---|---|
 | **What** | A parimutuel prediction market where amounts are public (so the odds are honest) and identities are private (so the flow is honest). One market, two clients: a browser wallet for a person, a headless runtime for a process |
 | **RFP match** | [RFP-07: prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
-| **Live on mainnet** | Market, Pragma resolver and committee resolver deployed. **Twelve pool transactions, three of which score** under the program's rule that a transaction must carry an event from a contract we list. Every claim re-derivable from chain by running one command |
-| **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money**, fuzzed and devnet-rehearsed, awaiting its mainnet declare |
+| **Live on mainnet** | Four contracts deployed: the market, both resolvers and the **leveraged market**. **Fourteen pool transactions, four of which score** under the program's rule that a transaction must carry an event from a contract we list. Every claim re-derivable from chain by running one command |
+| **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money**, live on mainnet and fuzzed |
 | **Complete surface** | Every write entrypoint on both contracts is reachable from both clients: betting, leverage, mandates, liquidity, market creation and settlement. Nothing is browser-only and nothing is agent-only |
 | **Agent-drivable** | The only entry in the field an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes, plus an **MCP server** so a browser host with no shell (claude.ai, an IDE panel) can trade and take alerts without leaving the editor |
 | **Verify us, do not trust us** | `node agent/cli.mjs verify` re-derives every recorded transaction and class hash straight from chain, then exits non-zero if one fails |
-| **Tests** | **318 green.** 69 Cairo with zero warnings (12 of them fuzz), 145 TypeScript, 104 agent runtime |
+| **Tests** | **322 green.** 69 Cairo with zero warnings (12 of them fuzz), 145 TypeScript, 108 agent runtime |
 | **Published** | [`veilcast-agent`](https://www.npmjs.com/package/veilcast-agent) and [`veilcast-sdk`](https://www.npmjs.com/package/veilcast-sdk) are on npm, so `npx veilcast-agent markets` works from a bare shell |
 | **Stack** | Cairo 2.20 · Next.js 16 · TypeScript · a dependency-light Node agent runtime · STRK20 Wallet API · Pragma |
 
@@ -80,11 +80,13 @@ That is the whole product: **delegate execution, never custody.** A stolen agent
 nothing but doing what you already asked for, at a price the market actually reached, paying your own
 address.
 
-> **Where each half runs today.** The parimutuel market is live on Starknet mainnet and the private
-> betting path has three verified mainnet transactions behind it. The mandate lives in
-> `LeveragedMarket`, which is built, fuzzed and rehearsed end to end against a devnet node but **not yet
-> deployed to mainnet**, so the delegation story is provable in the test suite rather than on chain
-> today. The Leverage tab says so rather than faking a book.
+> **All of it runs on mainnet.** `LeveragedMarket` deployed on 2026-09-02 at
+> [`0x01912b5c…96774`](https://voyager.online/contract/0x01912b5c0f775cc339db0cecd9b173cb6ad16f23686245ed9ac7642ad5e96774),
+> its vault is seeded, market 0 is open and one real leveraged position is held against it. Four
+> transactions score under the program's rule, the newest being a pool-routed leveraged open. The one
+> honest gap is the **claim leg**, which reverts on mainnet against a proof-version mismatch upstream of
+> us and runs end to end on Sepolia. That is documented in [OPERATIONS.md](docs/OPERATIONS.md) rather
+> than hidden. It affects every team on the program.
 
 ## What it is
 
@@ -458,7 +460,7 @@ exist: one walks the event log, the other walks blocks, which is the only way to
 | Layer | Technology |
 |---|---|
 | Contracts | Cairo 2.20 · Scarb · Starknet Foundry · **69 tests, 12 of them fuzz, zero warnings** |
-| Agent runtime | Node 20, one dependency (starknet.js) · **104 tests** · 31 verbs plus an MCP server · JSON out, dry run by default |
+| Agent runtime | Node 20, one dependency (starknet.js) · **108 tests** · 31 verbs plus an MCP server · JSON out, dry run by default |
 | Frontend | Next.js 16 · React 19 · CSS Modules · dark and light |
 | SDK | TypeScript · starknet.js 10 · framework-free · **145 tests** shared with the app |
 | Privacy | STRK20 pool · Wallet API in the browser · OHTTP proving and discovery headlessly |
@@ -476,7 +478,7 @@ exist: one walks the event log, the other walks blocks, which is the only way to
 | `verify` re-derives every claim from chain | ✅ every recorded claim holds, then it reports which transactions score rather than passing anything with a pool event |
 | Web app: board, bets, positions, leverage, mandates | ✅ complete |
 | `veilcast-sdk` with pinned vectors | ✅ market and leverage |
-| Leveraged market: FPMM, vault, keeper, insurance | ✅ complete and fuzzed, **mainnet deploy pending** |
+| Leveraged market: FPMM, vault, keeper, insurance | ✅ **live on Starknet mainnet**, vault seeded, market 0 open, one real leveraged position |
 | On-chain mandates, adversarially fuzzed | ✅ complete |
 | `veilcast-agent`, skills for three hosts | ✅ complete, 6 verbs already live against mainnet |
 | Manuals: integration, operations, security | ✅ complete |
@@ -551,7 +553,7 @@ npm run dev                     # http://localhost:3000
 
 npm test                        # 145 TypeScript tests
 cd cairo && snforge test        # 69 Cairo tests, 12 of them fuzz
-cd agent && npm test            # 104 agent runtime tests
+cd agent && npm test            # 108 agent runtime tests
 
 npm run typecheck && npm run build
 ```

@@ -17,7 +17,9 @@ if [[ ! "$LEV" =~ ^0x[0-9a-fA-F]+$ ]]; then
     exit 1
 fi
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# The paths below are repo-root relative (cairo/target, strk20.json), so resolve to the repo root rather
+# than to cairo/. dirname/.. is the cairo directory, so this needs one more level up.
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_DIR"
 
 echo "==> 1. confirm the class deployed at that address is the one we built"

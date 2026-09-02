@@ -132,7 +132,26 @@ const HANDLERS = {
     watch: commands.watch,
 };
 
+/// Silence starknet.js's own logger before any command runs.
+///
+/// It warns on stdout when a fee estimate has thin recent-tip data, which is harmless advice and fatal to
+/// the output contract: stdout carries exactly one JSON document, so an agent parsing it dies on a
+/// prefixed log line. Observed on a real mainnet `lp-add --confirm`, where the transaction landed
+/// correctly but the reply could not be parsed.
+///
+/// Silenced rather than redirected, because the warning tells the caller nothing they can act on and the
+/// runtime already reports fee facts in its own envelope.
+async function silenceLibraryLogging() {
+    try {
+        const { logger } = await import("starknet");
+        logger?.setLogLevel?.("OFF");
+    } catch {
+        // A version without the logger is fine: there is nothing to silence.
+    }
+}
+
 async function main() {
+    await silenceLibraryLogging();
     const argv = process.argv.slice(2);
     const command = argv[0];
     if (!command || command === "help" || command === "--help" || command === "-h") {

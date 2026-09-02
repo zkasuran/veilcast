@@ -594,7 +594,15 @@ export async function vaultLp({ config, args }) {
 export async function alerts({ config, args }) {
     requireLeverage(config, "alerts");
     const wantKeeper = args.keeper !== "false";
-    const key = readAgentKey(config);
+    // An absent agent key is not an error here: an operator watching vault health or an LP position has no
+    // mandates to check and should still get an answer. `sources` reports that mandates went unchecked, so
+    // a quiet result cannot be mistaken for a complete one.
+    let key = null;
+    try {
+        key = readAgentKey(config);
+    } catch {
+        key = null;
+    }
     const lpAddress = args.lp ?? args.address ?? null;
     const sources = { vault: false, keeper: false, mandates: false, lp: false };
 

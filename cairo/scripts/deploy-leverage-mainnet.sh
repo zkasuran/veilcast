@@ -109,6 +109,32 @@ $SN declare --contract-name LeveragedMarket --network "$NET" || true
 CLASS=$(scarb build >/dev/null 2>&1; \
   node -e 'const{hash,json}=require("starknet");const fs=require("fs");const s=json.parse(fs.readFileSync("target/dev/veilcast_LeveragedMarket.contract_class.json","utf8"));console.log(hash.computeContractClassHash(s))')
 echo "CLASS=$CLASS"
+
+# A declare is included before the node will serve the class, so deploying immediately fails with
+# "Class ... is not declared" even though the declare succeeded. Measured on 2026-09-02: the deploy
+# raced and lost on the first attempt, then worked once the class was visible. Wait for it rather than
+# retrying the deploy, because a failed deploy costs gas and a read costs nothing.
+echo "==> wait for the node to serve the declared class"
+node - "$CLASS" <<'WAITCLASS'
+const { RpcProvider } = require("starknet");
+const RPC = process.env.VEILCAST_RPC_URL ?? "https://rpc.starknet.lava.build";
+const classHash = process.argv[2];
+(async () => {
+    const provider = new RpcProvider({ nodeUrl: RPC });
+    for (let attempt = 1; attempt <= 30; attempt += 1) {
+        const seen = await provider.getClassByHash(classHash).catch(() => null);
+        if (seen) {
+            console.log(`   class visible after ${attempt} check(s)`);
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+    }
+    console.error("   class still not visible after 5 minutes. The declare is paid for, so re-run this");
+    console.error("   script: it skips an already-declared class and goes straight to the deploy.");
+    process.exit(1);
+})();
+WAITCLASS
+
 echo "==> deploy LeveragedMarket(pool, token)"
 LEV=$($SN deploy --network "$NET" --class-hash "$CLASS" --constructor-calldata "$POOL" "$TOKEN" \
       | tee /dev/stderr | grep -oE 'contract_address: 0x[0-9a-fA-F]+' | grep -oE '0x[0-9a-fA-F]+')

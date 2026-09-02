@@ -66,9 +66,19 @@ of unavoidable gas. `estimateDeclareFee` then pads the *price* by about 1.5x and
 reserve. A transaction whose account cannot reserve the full bound is rejected before it executes,
 even when the realized cost would have been lower.
 
-So budget against the estimate rather than a projection. `VeilcastMarket` estimated 71.9 STRK and
-settled at about 35, but that was the l2 price falling roughly by half between estimate and inclusion.
-That is a market move, not a discount you can plan for.
+So budget against the estimate rather than a projection. Measured on the real `LeveragedMarket` declare
+on 2026-09-02: the estimate asked for a 91.6 STRK reserve and the realized fee was **40.74 STRK**, a pad
+of about 2.25x. `VeilcastMarket` estimated 71.9 and settled near 35. Both realized well under half, and
+neither is a discount you can plan for: an account that cannot reserve the full bound is rejected before
+it executes.
+
+### The class is not deployable the instant it is declared
+
+A declare can succeed and the node still not serve the class, so a deploy issued immediately after fails
+with `Class ... is not declared`. That happened on the real run: the declare landed, the deploy raced and
+lost. `deploy-leverage-mainnet.sh` now polls `getClassByHash` until the class is visible before deploying,
+because a read costs nothing and a failed deploy costs gas. Re-running the script after a paid declare is
+safe: it skips an already-declared class.
 
 ### Spread balances are unreservable balances
 
@@ -264,6 +274,13 @@ rather than counting hashes the hub will ignore.
 good the code is.
 
 ---
+
+**An event scan returns nothing when the log is not empty.** A public RPC answers a `from_block: 0`
+range with an empty page rather than an error, so a scanner that starts at genesis reports zero results
+and looks correct while being blind. Both readers now start at the recorded deploy block, pinned in
+`config.mjs` as `marketFromBlock` and `leverageFromBlock`. This one bit twice: once on bet history, then
+again on `keeper-scan` the day the leveraged market deployed, where it reported no open positions with one
+open on chain.
 
 ## Failure modes and recovery
 
