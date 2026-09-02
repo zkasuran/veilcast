@@ -70,6 +70,19 @@ So budget against the estimate rather than a projection. `VeilcastMarket` estima
 settled at about 35, but that was the l2 price falling roughly by half between estimate and inclusion.
 That is a market move, not a discount you can plan for.
 
+### Spread balances are unreservable balances
+
+A reserve is checked against **one** account. STRK sitting in a tester is money the deployer cannot
+reserve against a declare bound, even though the wallet as a whole holds plenty. After a round of pool
+testing, sweep it back before reading the preflight:
+
+```bash
+node cairo/scripts/fund.mjs veilcast 6.1 --from tester2 --confirm
+```
+
+This is the same reason the cost table says to fund one account well rather than spreading across
+several. It applies in reverse once testing is done.
+
 ### The deploy refuses to start underfunded
 
 `cairo/scripts/deploy-leverage-mainnet.sh` runs a preflight before it spends anything: it reads the

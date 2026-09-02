@@ -14,16 +14,24 @@ const ACCOUNTS = new URL("../../../.wallet/accounts.json", import.meta.url).path
 
 const [, , target, amountStrk] = process.argv;
 const CONFIRM = process.argv.includes("--confirm");
+// Funding runs from the deployer by default, but the reverse direction matters too: a tester left
+// holding a balance is money the deployer cannot reserve against a declare bound.
+const fromIndex = process.argv.indexOf("--from");
+const FROM = fromIndex === -1 ? "veilcast" : process.argv[fromIndex + 1];
 if (!target || !amountStrk) {
-    console.error("usage: node scripts/fund.mjs <accountName> <amountStrk> [--confirm]");
+    console.error("usage: node scripts/fund.mjs <accountName> <amountStrk> [--from <accountName>] [--confirm]");
     process.exit(4);
 }
 const amount = BigInt(Math.round(Number(amountStrk) * 1e6)) * 10n ** 12n;
 
 const provider = new RpcProvider({ nodeUrl: RPC });
 const all = JSON.parse(fs.readFileSync(ACCOUNTS, "utf8"))["alpha-mainnet"];
-const from = all.veilcast;
+const from = all[FROM];
 const to = all[target];
+if (!from) {
+    console.error(`no account named ${FROM}.`);
+    process.exit(4);
+}
 if (!to) {
     console.error(`no account named ${target}. have: ${Object.keys(all).join(", ")}`);
     process.exit(4);
