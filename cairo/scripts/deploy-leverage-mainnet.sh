@@ -4,11 +4,21 @@
 #
 #   ./scripts/deploy-leverage-mainnet.sh
 #
-# SPENDS REAL STRK. Declare is the budget driver. The class carries the Mandate primitive, so it is
-# 20607 CASM felts, larger than VeilcastMarket's 16405 which settled at about 35 STRK.
-# estimateDeclareFee pads roughly 2x, so budget ~45 STRK for the declare and top the deployer up to
-# ~90 STRK before running this. Deploy is a few STRK; the vault seed and the market liquidity are
-# recoverable (remove_liquidity / void) rather than spent.
+# SPENDS REAL STRK. The declare is the budget driver and it is larger than it looks.
+#
+# Measured on 2026-09-02, not projected. The declare consumes a DETERMINISTIC 1,777,666,080 l2 gas,
+# identical across three estimator runs, so the amount is a property of the class rather than a padding
+# artifact. At the l2 price of the day (33,891,464,126 fri/unit) that is 60.25 STRK of gas which cannot
+# be avoided by tuning bounds. `estimateDeclareFee` then pads the PRICE about 1.5x, asking for a 90 STRK
+# reserve. Starknet rejects a transaction whose account cannot reserve the full bound even if the
+# realized cost would be lower.
+#
+# So the real requirement is ~90 STRK reserved, of which roughly 60 is actually spent at today's price.
+# VeilcastMarket estimated 71.9 and settled at ~35 because the l2 price fell about half between estimate
+# and inclusion, which was a market move rather than something to plan around.
+#
+# Deploy is a few STRK. The vault seed and the market liquidity are recoverable (remove_liquidity, or
+# void the market) rather than spent.
 #
 # The script refuses to start unless the balance covers the whole sequence. A half-finished deploy is
 # the expensive failure: the declare is paid for and non-refundable, so running out afterwards leaves

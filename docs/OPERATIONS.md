@@ -52,11 +52,22 @@ cost rather than a quote.
 | Private bet through the pool | ~3.1 to 3.7 STRK | the pool verifies a STARK proof on-chain |
 | Leveraged open through the pool | same order | same proof path |
 | Liquidation | ordinary transaction gas | no proof, so far cheaper |
-| Declaring a contract class | ~8 STRK small, ~35 STRK large | the real budget driver on deploys |
+| Declaring a contract class | ~8 STRK small, 35 to 60 STRK large | the real budget driver on deploys |
 
-Two things follow from this. First, the one-time pool setup dominates a new account's cost, so
-funding one account well beats spreading across several. Second, `estimateDeclareFee` pads roughly
-2x: a declare estimated at 72 STRK settled at about 35.
+Two things follow from this. First, the one-time pool setup dominates a new account's cost, so funding
+one account well beats spreading across several.
+
+Second, the one that catches people: **a declare's gas amount is deterministic, but the
+reserve you must hold is not the cost you will pay.** Measured on `LeveragedMarket` on 2026-09-02, the
+declare consumes 1,777,666,080 l2 gas, identical across three consecutive estimator runs, so the amount
+is a property of the class rather than an estimator artifact. At that day's l2 price that is 60.25 STRK
+of unavoidable gas. `estimateDeclareFee` then pads the *price* by about 1.5x and asks for a 90 STRK
+reserve. A transaction whose account cannot reserve the full bound is rejected before it executes,
+even when the realized cost would have been lower.
+
+So budget against the estimate rather than a projection. `VeilcastMarket` estimated 71.9 STRK and
+settled at about 35, but that was the l2 price falling roughly by half between estimate and inclusion.
+That is a market move, not a discount you can plan for.
 
 ### The deploy refuses to start underfunded
 
