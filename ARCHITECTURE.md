@@ -8,35 +8,55 @@ boundaries, the data flow from bet to claim, and how the pieces connect. Read th
 
 ## System overview
 
+Two clients drive the same contracts. A browser proves inside a privacy wallet. An agent proves for
+itself over OHTTP, which is what lets it run with no human present.
+
 ```mermaid
 graph TB
-    subgraph Browser["Browser (user's device)"]
-        App[Next.js App]
+    subgraph Browser["Browser (a person)"]
+        App[Next.js app]
         Coupons[(localStorage<br/>coupons)]
-        Wallet[Privacy Wallet<br/>Ready / Braavos]
+        Wallet[Privacy wallet<br/>Ready]
     end
 
-    subgraph Starknet["Starknet Mainnet"]
-        Pool[STRK20 Privacy Pool]
+    subgraph Agent["Any machine (an agent)"]
+        CLI[veilcast-agent<br/>20 verbs, JSON out]
+        AgentKey[(agent key<br/>mode 0600)]
+        OHTTP[OHTTP proving<br/>and discovery]
+    end
+
+    subgraph Starknet["Starknet mainnet"]
+        Pool[STRK20 privacy pool]
         Market[VeilcastMarket]
+        Lev[LeveragedMarket<br/>vault, mandates, keeper]
         Pragma[PragmaResolver]
         Committee[CommitteeResolver]
-        Oracle[Pragma Oracle Feed]
+        Oracle[Pragma oracle feed]
     end
 
-    Relayer[Pool Relayer<br/>rotating shared address]
+    Relayer[Pool relayer<br/>rotating shared address]
 
     App -->|read board, odds| Market
     App -->|build action list| Wallet
     Wallet -->|strk20InvokeTransaction| Pool
+    CLI --> AgentKey
+    CLI -->|prove, no wallet needed| OHTTP
+    OHTTP -->|proof-carrying single call| Pool
+    CLI -->|read free: board, marks, mandates| Market
+    CLI -->|liquidate, public tx| Lev
     Pool -->|privacy_invoke| Market
+    Pool -->|privacy_invoke Open, Close, AgentClose| Lev
     Pool -->|submit via| Relayer
     Relayer -->|on-chain tx| Starknet
     Pragma -->|settle from feed| Oracle
     Pragma -->|resolve| Market
-    Committee -->|vote + quorum| Market
-    App <-->|save/load| Coupons
+    Committee -->|vote plus quorum| Market
+    App <-->|save, load| Coupons
 ```
+
+Note what the agent never touches. It holds its own signing key and never an owner's coupon. It
+reaches the pool through the same `privacy_invoke` entry point the browser does, so it gains no
+privileged path. The only asymmetry is who does the proving.
 
 ---
 
@@ -147,15 +167,46 @@ Storage:
   total_backing, insurance         : u128         // complete-set backing plus the bad-debt fund
   markets   : Map<u64, LevMarket>                 // FPMM reserves + settlement metadata
   positions : Map<(u64, u8, felt252), Position>   // (market, side, key) → margin, borrow, shares
+  mandates  : Map<(u64, u8, felt252), Mandate>    // the bounded agent authority, write-once at open
 
 Key functions:
-  add_liquidity / remove_liquidity                // LPs fund the vault, priced in shares
-  create_market(resolver, close_at, liquidity)    // seed a 50/50 book from the vault
-  privacy_invoke(Open | Close)                    // pool-only: open or close a position privately
-  liquidate(market, side, position_key)           // permissionless once health <= 8%
-  resolve / void                                  // resolver settles or cancels
-  position_equity(...) → (value, equity, health)  // mark a position to the live book
+  add_liquidity / remove_liquidity                     // LPs fund the vault, priced in shares
+  create_market(resolver, close_at, liquidity)         // seed a 50/50 book from the vault
+  privacy_invoke(Open | Close | AgentClose)            // pool-only: the three private paths
+  liquidate(market, side, position_key)                // permissionless once health <= 8%
+  resolve / void                                       // resolver settles or cancels
+  position_equity(...) → (value, equity, health)       // mark a position to the live book
+  get_mandate(market, side, position_key) → Mandate    // read what authority a position carries
 ```
+
+#### The Mandate: delegation without custody
+
+A `Mandate` is the trust primitive the agent layer rests on. The owner attaches it inside `do_open`,
+and that is the only moment it can be set: there is no setter, while re-opening the same key reverts with
+`POSITION_EXISTS`. An authority that could be widened later would be no bound at all.
+
+```
+Mandate {
+  agent_key       : felt252          // who may act. Zero means nobody ever can
+  stop_price_bps  : u16              // fires at or below. Zero disables
+  take_price_bps  : u16              // fires at or above. Zero disables
+  payout_target   : ContractAddress  // where an agent close MUST pay
+}
+```
+
+`do_agent_close` checks four things in order, then pays:
+
+1. the position is open, else `NO_POSITION`
+2. a mandate exists naming an agent, else `NO_MANDATE`
+3. the signature verifies against the stored `agent_key` over the stored `payout_target`, else
+   `BAD_CLOSE_SIGNATURE`
+4. the live marginal price is at or below the stop, or at or above the take, else `MANDATE_NOT_MET`
+5. the payout goes to `mandate.payout_target`, read from storage
+
+The agent's whole input is six felts: `[2, market_id, side, position_key, r, s]`. There is nowhere in it
+to put a recipient or a price, which is deliberate: **a field an agent could fill is a field an agent
+could abuse.** The owner path verifies against `position_key` and the agent path against `agent_key`, so
+neither signature is valid on the other's path and neither can be replayed as the other.
 
 **Risk parameters:** 5x leverage cap, 8% maintenance margin, 1% keeper reward, 0.30% open fee to
 insurance. **Solvency invariant:** `balance >= vault_free + total_backing + insurance` holds on
@@ -378,12 +429,19 @@ shared vectors with the Cairo contract and the app, so all three implementations
 
 | Layer | Framework | Count | What's covered |
 |-------|-----------|-------|---------------|
-| Cairo contracts | snForge 0.63 | 52 | Full bet→resolve→claim path, access control, fee math, resolvers, the leveraged market's open/close/liquidate lifecycle, plus fuzz tests over the FPMM and the solvency invariant |
-| TypeScript utils | Vitest 4.1 | 127 | Calldata encoding, claim and close signatures, parimutuel and FPMM math, leverage quotes and position marks, coupon vault (AES-GCM), board/market reads, event parsing, portfolio P&L, SDK |
+| Cairo contracts | snForge 0.63 | 66 | Full bet, resolve and claim path, access control, fee math, both resolvers, the leveraged market's open, close and liquidate lifecycle, plus 12 fuzz tests over the FPMM, the solvency invariant and the agent trust boundary |
+| TypeScript | Vitest 4.1 | 141 | Calldata encoding, claim and close signatures, parimutuel and FPMM math, leverage quotes and position marks, mandate validation, coupon vault (AES-GCM), board reads, event parsing, portfolio P&L, SDK |
+| Agent runtime | node:test | 58 | The pricing port against Cairo vectors, calldata layouts, the raw-felt board decoder against literal mainnet felts, the custody guard, host detection and every generated skill file's shape |
 
-**Pinned vectors:** The claim and close message hashes are computed identically in Cairo and
-TypeScript and asserted against the same hardcoded felt in every suite. A drift in any side fails a
-test before an on-chain transaction can revert.
+**Pinned vectors.** The claim and close message hashes are computed in four independent
+implementations (Cairo, the SDK, the app, the agent runtime) and asserted against the same hardcoded
+felt in every suite. A drift in any one of them fails a test before a transaction can revert.
+
+**Adversarial fuzz over the trust boundary.** The security claim behind the Mandate is not asserted
+once, it is hammered: random stranger keys never close a mandated position, the legitimate agent is
+refused at random prices outside its band, the pinned target is always paid and no other address ever
+receives anything, owner and agent signatures never verify on each other's path, plus solvency holds
+across random interleavings of agent close and keeper liquidation.
 
 ---
 
