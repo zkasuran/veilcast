@@ -45,7 +45,7 @@
 |---|---|
 | **What** | A parimutuel prediction market where amounts are public (so the odds are honest) and identities are private (so the flow is honest) |
 | **RFP match** | [RFP-07: prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
-| **Live on mainnet** | Market, Pragma resolver and committee resolver deployed. Four pool transactions recorded. Every claim re-derivable from chain |
+| **Live on mainnet** | Market, Pragma resolver and committee resolver deployed. **Eight verified pool transactions.** Every claim re-derivable from chain by running one command |
 | **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money** |
 | **Agent-drivable** | The only entry in the field an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes |
 | **Verify us, do not trust us** | `node agent/cli.mjs verify` re-derives every recorded transaction and class hash straight from chain, then exits non-zero if one fails |
@@ -289,7 +289,8 @@ unlocked headless mainnet, then cost us a rule per failure:
 | `INDEX_NOT_SEQUENTIAL` | poll discovery between deposits; never sleep and hope |
 
 Every one of those now lives once, in [`agent/src/pool.mjs`](agent/src/pool.mjs), so nobody has to
-rediscover them. Three shields and a real private bet landed, with one honest finding alongside:
+rediscover them. A register, five shields and a real private bet landed, all eight verifiable from
+chain, with one honest finding alongside:
 the **payout leg still reverts on mainnet** with a proof-version mismatch upstream of us. It is
 documented in [OPERATIONS.md](docs/OPERATIONS.md) rather than hidden. It affects the whole program.
 
@@ -414,8 +415,8 @@ cd cairo && node scripts/rehearse-devnet.mjs
 | | Status |
 |---|---|
 | Market contract plus two resolvers | ✅ live on Starknet mainnet, class hashes verified |
-| Four mainnet pool transactions | ✅ three shields and a private bet, all with pool events |
-| `verify` re-derives every claim from chain | ✅ 7 of 7 pass |
+| Mainnet pool transactions | ✅ **eight**: a register, five shields, a private bet, all with pool events |
+| `verify` re-derives every claim from chain | ✅ 11 of 11 pass |
 | Web app: board, bets, positions, leverage, mandates | ✅ complete |
 | `veilcast-sdk` with pinned vectors | ✅ market and leverage |
 | Leveraged market: FPMM, vault, keeper, insurance | ✅ complete and fuzzed, **mainnet deploy pending** |
@@ -566,13 +567,18 @@ Full docs: [sdk/README.md](sdk/README.md)
 
 ## `strk20.json`
 
-The sprint hub reads this file from the repo root. It carries the live mainnet deployment: the
-market and both resolvers, plus four pool transactions (three deposits and a private bet).
+The sprint hub reads this file from the repo root. It carries the live mainnet deployment: the market
+and both resolvers, plus **eight verified STRK20 pool transactions** in block order: a register, five
+shielding deposits across two accounts, then a private bet through the market.
 
 ```json
 {
   "transactions": [
+    "0x7b645075d83cc2a4e68343ecaccda7d07833da04d3f0386b9841feb4ecd9e20",
+    "0x39f4616ba5164302df445e34a2a213270c4b457f5523608ef9c101e9649a4c7",
     "0x747e97fa539bb1b566d1bcb5529c4c1089a46b4fca20aac8ba685ffdbdfde7",
+    "0x5c107536905a66222e21b47db8f36bf5634e047c377d86c1d4dfa96c53c3f8d",
+    "0x5da85f3e2ee82bac86521ce19edc34662cda4ab849f4459ba7e667d8bd5f85",
     "0x95ce11a4cb0ac58bd76a7e94b07b47650bdcf9769907c8c628c773ab00f78",
     "0x21234b944ac0b7c8d58a6aff7d9a0878941ff0881de6a42a39cfecfbfd4f2e6",
     "0x6fcd0c39c2407a50f42297fbcef65b9b3f278f86707f7c6bf4b5d1e324cc095"
