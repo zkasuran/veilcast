@@ -108,6 +108,54 @@ the one named account and never writes to it, so the operator keeps custody of t
 
 ---
 
+## Drive it from a web coding host
+
+A browser host (claude.ai, an IDE panel, a hosted agent) has no shell, so a skill file telling it to type
+`veilcast-agent vault` is useless there. The runtime speaks **MCP** for exactly that case, over stdio:
+
+```bash
+npx veilcast-agent mcp
+```
+
+`init` writes the config for you. Any host that reads an `mcpServers` map takes this verbatim:
+
+```json
+{
+  "mcpServers": {
+    "veilcast": { "command": "npx", "args": ["-y", "veilcast-agent", "mcp"] }
+  }
+}
+```
+
+Twenty tools, generated from the same catalog the shell skills are generated from, so a browser host and
+a terminal host can never be told a different set of verbs. Two resources come with it:
+`veilcast://capabilities` is the machine-readable manifest including the trust boundary, and
+`veilcast://privacy` states what is private before a model describes the system to a user.
+
+**Nothing spends without `confirm: true`**, exactly as the CLI behaves. The schema says so in the field
+description, so a model reads it before filling it in. Four verbs are withheld rather than offered
+broken: `init` needs a local filesystem, `keeper` and `watch` run forever, then `lev-close` takes the
+owner's bearer coupon, which must never cross a tool boundary into a hosted model's context. Asking for
+one returns the reason.
+
+### Alerts, without a daemon
+
+A browser host cannot receive a webhook, so there is nothing to push into. `alerts` derives everything
+worth interrupting somebody over from the current block on every call, which means an alert can never be
+stale or fire twice for a condition that has since resolved:
+
+```bash
+veilcast-agent alerts --lp 0x<yourAddress>
+```
+
+It ranks by what it costs to ignore. `critical` is money at risk now: the solvency invariant broken, or
+a firable stop about to be liquidated instead, which charges the owner a penalty a stop would avoid.
+`warning` is something that will cost money if left. `info` is an opportunity, such as keeper work on the
+table. Each alert carries the command that acts on it. `sources` reports which inputs were actually
+read, so a quiet result cannot be mistaken for a complete one.
+
+---
+
 ## Commands
 
 Read-only, free, no keys:
@@ -127,7 +175,9 @@ Read-only, free, no keys:
 | `keeper-scan [--min-reward STRK]` | positions liquidatable now, best paying first |
 | `mandate-scan` | mandates this agent holds and which are firable |
 | `agent-key` | this agent's public key, for an owner to name in a mandate |
+| `alerts [--lp ADDR]` | everything needing attention now, most severe first, derived from the current block |
 | `verify [--file strk20.json]` | re-derive every recorded claim straight from chain, then score each transaction under the program's rule |
+| `mcp` | serve MCP on stdio, for a web coding host with no shell |
 
 Money, dry run by default:
 

@@ -57,6 +57,7 @@ import { approvePool, openSession, poolBet, poolInvoke, poolOpen, shield } from 
 import { betHistory, board, market, payoutMultiple, quotePayout } from "./market.mjs";
 import { scanKeeper, scanMandates } from "./scan.mjs";
 import { writeSkills } from "./install.mjs";
+import { deriveAlerts } from "./alerts.mjs";
 
 /// Parse a side argument. Accepts the words a human or an LLM would naturally use, because "yes" is
 /// what a model writes and 0 is what the contract wants.
@@ -579,6 +580,74 @@ export async function vaultLp({ config, args }) {
             : full.payable
               ? "The whole holding is withdrawable right now."
               : "The shares are worth this much, but not all of it is payable: the collateral behind them is lent out or seeded into a market. Withdraw a smaller slice or wait for positions to close."
+    );
+}
+
+/// Every alert the current chain state justifies, most severe first.
+///
+/// The verb a web coding host polls. It exists because such a host cannot run a daemon, so there is
+/// nothing to push into: the alerts are derived from the current block on every call, which means one
+/// can never go stale or fire for a condition that has since resolved.
+///
+/// Each input is fetched only when it is reachable and relevant. An operator with no agent key holds no
+/// mandates; an address with no shares has no withdrawal to warn about. A missing input contributes no
+/// alerts rather than a false all-clear. `sources` says which were actually read, so a quiet result
+/// cannot be mistaken for a complete one.
+export async function alerts({ config, args }) {
+    requireLeverage(config, "alerts");
+    const wantKeeper = args.keeper !== "false";
+    const key = readAgentKey(config);
+    const lpAddress = args.lp ?? args.address ?? null;
+    const sources = { vault: false, keeper: false, mandates: false, lp: false };
+
+    const [vault, chain] = await Promise.all([vaultState(config), proveBlock(config)]);
+    sources.vault = true;
+
+    let keeper = null;
+    if (wantKeeper) {
+        keeper = await scanKeeper(config, {
+            minRewardWei: args["min-reward"] ? requireAmount(args["min-reward"], "--min-reward") : 0n,
+        });
+        sources.keeper = true;
+    }
+
+    let mandates = null;
+    if (key) {
+        mandates = await scanMandates(config, agentPublicKey(key));
+        sources.mandates = true;
+    }
+
+    let lp = null;
+    if (lpAddress) {
+        const held = await vaultShares(config, lpAddress);
+        const price = sharePrice(vault.capital, vault.sharesTotal);
+        const worth = (held * price) / 10n ** 18n;
+        const quote = held > 0n ? await quoteRemoveLiquidity(config, held) : { amount: 0n, payable: false };
+        const history = held > 0n ? await liquidityHistory(config, lpAddress) : [];
+        lp = {
+            shares: held,
+            worth,
+            quote,
+            withdrawableNow: quote.payable ? quote.amount : vault.free < worth ? vault.free : worth,
+            result: history.length > 0 ? lpResult(history, worth) : null,
+        };
+        sources.lp = true;
+    }
+
+    const derived = deriveAlerts({ vault, keeper, mandates, lp, chain });
+    return ok(
+        "alerts",
+        {
+            ...derived,
+            sources,
+            // Named so a host can tell "nothing is wrong" from "I could not look".
+            notChecked: Object.entries(sources)
+                .filter(([, checked]) => !checked)
+                .map(([name]) => name),
+        },
+        derived.quiet
+            ? "Nothing needs attention. This scan is free, so poll it as often as you like."
+            : `${derived.counts.critical} critical, ${derived.counts.warning} warning, ${derived.counts.info} info. Each alert carries the command that acts on it.`
     );
 }
 

@@ -277,6 +277,72 @@ output, so an agent can branch on `felt` and read `hint`.
 
 ---
 
+## Wiring a host with no shell
+
+Everything above assumes a process that can run a command. A browser host cannot, so the runtime also
+speaks Model Context Protocol over stdio:
+
+```bash
+npx veilcast-agent mcp
+```
+
+Any host that reads an `mcpServers` map takes this config verbatim. `veilcast-agent init` writes it to
+`mcp.json` plus `.mcp.json` for you:
+
+```json
+{
+  "mcpServers": {
+    "veilcast": {
+      "command": "npx",
+      "args": ["-y", "veilcast-agent", "mcp"],
+      "env": { "VEILCAST_RPC_URL": "https://rpc.starknet.lava.build" }
+    }
+  }
+}
+```
+
+Four properties are worth knowing before you build against it.
+
+**The tool list is generated from the same catalog the shell skills are.** A browser host and a terminal
+host cannot be told a different set of verbs, because there is one source and both render from it.
+
+**`confirm` is never a required argument.** A dry run is the default on every tool that spends. The
+schema says so in the field description rather than only in prose, so a model reads it before filling the
+field in. A schema that demanded `confirm` would get it set to satisfy the schema.
+
+**Four verbs are withheld rather than offered broken.** `init` writes to a local filesystem, `keeper` and
+`watch` never return, then `lev-close` takes the owner's bearer coupon, which must not cross a tool
+boundary into a hosted model's context. Calling one returns `-32602` with the reason in `data.withheld`,
+because a menu with an item that cannot work is worse than a shorter menu.
+
+**A refused tool is content with `isError`, not a protocol error.** The call itself succeeded, so the
+model gets the envelope with its `error`, `felt` and `hint` fields and can recover. A transport error
+would just be retried.
+
+Two resources come with the tools. `veilcast://capabilities` is the machine-readable manifest, including
+the trust boundary, so a model that has read it will not propose a plan the contract would refuse.
+`veilcast://privacy` states what is and is not private, because overclaiming is the common mistake and
+STRK20 gives identity privacy rather than amount privacy.
+
+### Alerts without a daemon
+
+A browser host cannot receive a webhook, so nothing can be pushed to it. `alerts` derives every condition
+worth interrupting somebody over from the current block on each call, which means an alert cannot be
+stale and cannot fire twice for something already resolved. A host polls it on a timer.
+
+```
+critical  the solvency invariant is broken; a firable stop is about to be liquidated instead
+warning   something that costs money if ignored: a band met, an empty insurance fund
+info      an opportunity: keeper work on the table, an LP slice not currently payable
+```
+
+Every alert carries a stable `id`, so a host that has already shown one recognises it on the next poll
+rather than re-notifying, plus the exact command that acts on it. `sources` reports which inputs were
+actually read, so `quiet: true` cannot be mistaken for a clean bill of health when the agent simply had
+no key with which to check mandates.
+
+---
+
 ## Output contract
 
 Every `veilcast-agent` command prints exactly one JSON object on stdout and nothing else. Progress

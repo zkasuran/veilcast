@@ -98,3 +98,20 @@ export function isDeployed(address) {
     }
 }
 
+
+/// Build a config from already-parsed CLI or MCP arguments.
+///
+/// Lives here rather than in the CLI because the MCP transport needs the identical mapping: a browser
+/// host passing `leverage: "3x"` must not be read as a contract address, which is why only a value
+/// starting with 0x is treated as one.
+export function configFrom(args = {}) {
+    const asAddress = (value) => (typeof value === "string" && value.startsWith("0x") ? value : undefined);
+    return resolveConfig({
+        rpcUrl: args.rpc,
+        market: asAddress(args.market),
+        leverage: args["leverage-address"] ?? asAddress(args.leverage),
+        sdkPath: args.sdk,
+        home: args.home,
+        proveLag: args["prove-lag"],
+    });
+}

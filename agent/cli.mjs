@@ -11,7 +11,7 @@
 /// --confirm only if the plan is what you intended.
 
 import { EXIT, emit, fail, feltError, note, FELT_HINTS } from "./src/result.mjs";
-import { resolveConfig } from "./src/config.mjs";
+import { configFrom } from "./src/config.mjs";
 import * as commands from "./src/commands.mjs";
 
 const USAGE = `veilcast-agent <command> [options]
@@ -24,6 +24,7 @@ Read-only, free, no keys needed:
   lev-markets               the leveraged board with live prices
   vault                     vault free, backing, insurance, share price and the solvency invariant
   vault-lp --lp ADDR        one LP's shares, their worth, what a withdrawal pays and the P&L
+  alerts     [--lp ADDR]     everything needing attention right now, most severe first
   position   --market --side --key       one leveraged position, marked to the book
   mandate    --market --side --key       the authority a position carries
   quote      --market --side --margin --leverage   what an open would do, exactly as the contract
@@ -33,6 +34,7 @@ Read-only, free, no keys needed:
 
 Setup:
   init       [--host auto|claude|openclaw|hermes|generic] [--rotate]
+  mcp                       serve MCP on stdio, for a web host that has no shell
   agent-key                 print this agent's PUBLIC key, for an owner to put in a mandate
 
 Money (dry run by default, add --confirm to send):
@@ -87,18 +89,6 @@ function parseArgs(argv) {
 /// `--leverage-address` names the contract. So an address override is only taken when it looks like an
 /// address, which keeps `quote --leverage 3x` from silently pointing the runtime at a contract called
 /// "3x".
-function configFrom(args) {
-    const asAddress = (value) => (typeof value === "string" && value.startsWith("0x") ? value : undefined);
-    return resolveConfig({
-        rpcUrl: args.rpc,
-        market: asAddress(args.market),
-        leverage: args["leverage-address"] ?? asAddress(args.leverage),
-        sdkPath: args.sdk,
-        home: args.home,
-        proveLag: args["prove-lag"],
-    });
-}
-
 const HANDLERS = {
     status: commands.status,
     doctor: commands.doctor,
@@ -109,6 +99,7 @@ const HANDLERS = {
     "lev-markets": commands.levMarkets,
     vault: commands.vault,
     "vault-lp": commands.vaultLp,
+    alerts: commands.alerts,
     position: commands.position,
     mandate: commands.mandateCommand,
     quote: commands.quote,
@@ -131,6 +122,13 @@ async function main() {
     if (!command || command === "help" || command === "--help" || command === "-h") {
         note(USAGE);
         process.exitCode = command ? EXIT.ok : EXIT.badRequest;
+        return;
+    }
+    // Not in HANDLERS: the server holds the process open and speaks JSON-RPC on stdout, where every other
+    // verb prints one envelope and exits. Routing it through the same table would corrupt the stream.
+    if (command === "mcp") {
+        const { serve } = await import("./src/mcp-stdio.mjs");
+        await serve({ argv: argv.slice(1) });
         return;
     }
     const handler = HANDLERS[command];

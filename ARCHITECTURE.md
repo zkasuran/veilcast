@@ -20,7 +20,7 @@ graph TB
     end
 
     subgraph Agent["Any machine (an agent)"]
-        CLI[veilcast-agent<br/>21 verbs, JSON out]
+        CLI[veilcast-agent<br/>23 verbs + MCP, JSON out]
         AgentKey[(agent key<br/>mode 0600)]
         OHTTP[OHTTP proving<br/>and discovery]
     end
@@ -446,7 +446,7 @@ shared vectors with the Cairo contract and the app, so all three implementations
 |-------|-----------|-------|---------------|
 | Cairo contracts | snForge 0.63 | 69 | Full bet, resolve and claim path, access control, fee math, both resolvers, the leveraged market's open, close and liquidate lifecycle, plus 12 fuzz tests over the FPMM, the solvency invariant and the agent trust boundary, then LP share pricing against what a withdrawal actually pays |
 | TypeScript | Vitest 4.1 | 145 | Calldata encoding, claim and close signatures, parimutuel and FPMM math, leverage quotes and position marks, mandate validation, coupon vault (AES-GCM), board reads, event parsing, portfolio P&L, LP share pricing, SDK |
-| Agent runtime | node:test | 77 | The pricing port against Cairo vectors, calldata layouts, the raw-felt board decoder against literal mainnet felts, the custody guard, the program's eligibility rule, LP share pricing and P&L folding, host detection and every generated skill file's shape |
+| Agent runtime | node:test | 104 | The pricing port against Cairo vectors, calldata layouts, the raw-felt board decoder against literal mainnet felts, the custody guard, the program's eligibility rule, LP share pricing and P&L folding, the alert severity rules, the MCP tool schemas and protocol surface, host detection and every generated skill file's shape |
 
 **Pinned vectors.** The claim and close message hashes are computed in four independent
 implementations (Cairo, the SDK, the app, the agent runtime) and asserted against the same hardcoded

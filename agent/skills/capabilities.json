@@ -169,6 +169,15 @@
       ]
     },
     {
+      "name": "alerts",
+      "summary": "Everything needing attention right now, most severe first: solvency, a firable stop about to be liquidated instead, an empty insurance fund, a vault that cannot lend, an LP position that is not fully withdrawable, keeper work on the table. Derived from the current block on every call rather than queued, so an alert can never be stale.",
+      "spends": false,
+      "args": [
+        "--lp <address> to include a liquidity position",
+        "--min-reward <STRK> to ignore keeper work paying less"
+      ]
+    },
+    {
       "name": "shield",
       "summary": "Move STRK into the privacy pool.",
       "spends": true,
@@ -176,6 +185,18 @@
       "args": [
         "--amount <STRK>",
         "--first for a fresh account",
+        "--confirm to actually send"
+      ]
+    },
+    {
+      "name": "bet",
+      "summary": "Place a private bet on the parimutuel board. One pool transaction: the stake is withdrawn into the market and the bet is booked in the same proof-carrying call.",
+      "spends": true,
+      "dryRunDefault": true,
+      "args": [
+        "--market <id>",
+        "--outcome <index>",
+        "--amount <STRK>",
         "--confirm to actually send"
       ]
     },

@@ -104,7 +104,7 @@ export function capabilities({ agentPublicKey, config } = {}) {
 }
 
 /// The command catalog: what each verb does, what it needs and whether it can spend.
-function commandCatalog() {
+export function commandCatalog() {
     const read = (name, summary, args = []) => ({ name, summary, spends: false, args });
     const write = (name, summary, args = []) => ({
         name,
@@ -147,7 +147,16 @@ function commandCatalog() {
         read("keeper-scan", "Positions liquidatable now, best paying first.", ["--min-reward <STRK>"]),
         read("mandate-scan", "Mandates this agent holds and which are firable right now."),
         read("verify", "Re-derive every claim in strk20.json straight from chain, then score each transaction under the program's rule: it counts only if it succeeded, the pool emitted an event in it and a contract listed in the file emitted one too. Exits 2 when the claims hold but too few count, 5 when a recorded claim does not hold.", ["--file <path>"]),
+        read("alerts", "Everything needing attention right now, most severe first: solvency, a firable stop about to be liquidated instead, an empty insurance fund, a vault that cannot lend, an LP position that is not fully withdrawable, keeper work on the table. Derived from the current block on every call rather than queued, so an alert can never be stale.", [
+            "--lp <address> to include a liquidity position",
+            "--min-reward <STRK> to ignore keeper work paying less",
+        ]),
         write("shield", "Move STRK into the privacy pool.", ["--amount <STRK>", "--first for a fresh account"]),
+        write("bet", "Place a private bet on the parimutuel board. One pool transaction: the stake is withdrawn into the market and the bet is booked in the same proof-carrying call.", [
+            "--market <id>",
+            "--outcome <index>",
+            "--amount <STRK>",
+        ]),
         write("lev-open", "Open a leveraged position, optionally granting a mandate.", [
             "--market <id>",
             "--side <yes|no>",
@@ -175,7 +184,31 @@ function commandCatalog() {
         write("watch", "Scan and fire mandates when a band is met.", ["--interval <sec>", "--once"]),
     ];
 }
-// PLACEHOLDER_INSTALL
+/// The MCP server config a host launches us with.
+///
+/// One shape, because every MCP host reads the same `mcpServers` map: a command, its arguments and any
+/// environment. `npx -y` rather than a path, so it works on a machine that has never installed this and
+/// keeps working after an upgrade.
+///
+/// The environment names the variables rather than their values. A config file that carried a real key
+/// would be a config file nobody can commit. These are all paths or endpoints anyway: the agent's
+/// signing key never appears here, because it is read from disk at mode 0600 and never passed as an
+/// argument.
+export function renderMcpConfig({ command = "npx", pkg = "veilcast-agent" } = {}) {
+    return {
+        mcpServers: {
+            veilcast: {
+                command,
+                args: [...(command === "npx" ? ["-y", pkg] : []), "mcp"],
+                env: {
+                    VEILCAST_RPC_URL: "${VEILCAST_RPC_URL:-https://rpc.starknet.lava.build}",
+                    VEILCAST_PRIVACY_SDK: "${VEILCAST_PRIVACY_SDK:-}",
+                },
+            },
+        },
+    };
+}
+
 
 /// Write the skill and config files the detected host reads and return what was written.
 ///
@@ -200,9 +233,15 @@ export function writeSkills({ host = "auto", config, agentPublicKey, force = fal
     // Every host, whatever it is: the canonical machine-readable facts and a human-readable brief.
     put(".veilcast/capabilities.json", `${JSON.stringify(facts, null, 2)}\n`);
     put("AGENTS.md", renderAgentsMd(facts));
+    // The MCP server config, for a host with no shell. Written for every host rather than only the
+    // detected one: a developer often runs a terminal agent locally and a browser agent on the same
+    // repository, where the browser one cannot be detected from here at all.
+    put("mcp.json", `${JSON.stringify(renderMcpConfig(), null, 2)}\n`);
 
     if (resolved === "claude") {
         put(".claude/skills/veilcast/SKILL.md", renderClaudeSkill(facts));
+        // Claude Code reads .mcp.json at the project root and offers the server to the user.
+        put(".mcp.json", `${JSON.stringify(renderMcpConfig(), null, 2)}\n`);
     } else if (resolved === "openclaw") {
         put(".openclaw/tools/veilcast.json", `${JSON.stringify(renderOpenclawTool(facts), null, 2)}\n`);
         put(".openclaw/skills/veilcast.md", renderAgentsMd(facts));
