@@ -928,3 +928,70 @@ fn a_mandate_must_be_well_formed() {
         Result::Err(data) => assert(*data.at(0) == 'BAD_MANDATE', 'wrong err'),
     }
 }
+
+/// An LP must be able to price a share before burning it.
+///
+/// `remove_liquidity` takes shares and pays `shares * capital / total`, so the two ratio terms and the
+/// quote are the difference between a considered withdrawal and a blind one. The quote is asserted
+/// against what the withdrawal actually pays rather than against a recomputation, because a quote that
+/// rounds differently from the thing it quotes is worse than no quote.
+#[test]
+fn an_lp_can_price_a_share_before_burning_it() {
+    let env = setup();
+    add_lp(env, 100 * ONE);
+
+    let shares = env.lev.get_vault_shares(LP());
+    assert(shares == 100 * ONE, 'first LP gets 1:1');
+    assert(env.lev.get_vault_shares_total() == shares, 'sole LP owns it all');
+    assert(env.lev.get_vault_capital() == 100 * ONE, 'capital is the deposit');
+
+    let (quoted, payable) = env.lev.quote_remove_liquidity(40 * ONE);
+    assert(quoted == 40 * ONE, 'quote is pro rata');
+    assert(payable, 'free collateral covers it');
+
+    let before = env.token.balance_of(LP());
+    start_cheat_caller_address(env.lev_addr, LP());
+    let paid = env.lev.remove_liquidity(40 * ONE);
+    stop_cheat_caller_address(env.lev_addr);
+    assert(paid == quoted, 'quote matched the payout');
+    assert(env.token.balance_of(LP()) == before + paid.into(), 'tokens arrived');
+    assert(env.lev.get_vault_shares_total() == 60 * ONE, 'shares burned');
+    assert(env.lev.get_vault_capital() == 60 * ONE, 'capital fell with it');
+}
+
+/// Committed collateral is not withdrawable, so the quote says so before the revert.
+///
+/// Seeding a market moves free collateral into the AMM. The shares still exist and are still worth
+/// their pro-rata slice, so the honest answer is not "you own less" but "the vault cannot pay you right
+/// now", which is exactly what `payable == false` means.
+#[test]
+fn a_quote_reports_unpayable_when_the_vault_is_committed() {
+    let env = setup();
+    add_lp(env, 100 * ONE);
+    create_market(env, 90 * ONE, 9999999999);
+
+    assert(env.lev.get_vault_free() == 10 * ONE, 'only the remainder is free');
+    assert(env.lev.get_vault_capital() == 100 * ONE, 'capital is unchanged');
+
+    let (quoted, payable) = env.lev.quote_remove_liquidity(100 * ONE);
+    assert(quoted == 100 * ONE, 'still worth the whole vault');
+    assert(!payable, 'but not payable now');
+
+    let (small, small_payable) = env.lev.quote_remove_liquidity(10 * ONE);
+    assert(small == 10 * ONE, 'a small slice prices fine');
+    assert(small_payable, 'and is payable');
+}
+
+/// An empty vault quotes zero rather than dividing by zero.
+#[test]
+fn quoting_an_empty_vault_is_zero_and_unpayable() {
+    let env = setup();
+    let (quoted, payable) = env.lev.quote_remove_liquidity(ONE);
+    assert(quoted == 0, 'nothing to price');
+    assert(!payable, 'and nothing to pay');
+
+    add_lp(env, 10 * ONE);
+    let (zero, zero_payable) = env.lev.quote_remove_liquidity(0);
+    assert(zero == 0, 'zero shares pay zero');
+    assert(!zero_payable, 'and are not payable');
+}

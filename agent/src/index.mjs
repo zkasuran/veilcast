@@ -36,6 +36,7 @@ export {
     markPosition,
     mandateStatus,
     keeperReward,
+    sharePrice,
     formatStrk,
     parseStrk,
 } from "./pricing.mjs";
@@ -73,6 +74,8 @@ export {
     openedPositions,
     receiptFacts,
     countsUnderProgramRule,
+    quoteRemoveLiquidity,
+    vaultShares,
     classHashAt,
 } from "./chain.mjs";
 export {

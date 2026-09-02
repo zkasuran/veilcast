@@ -197,6 +197,20 @@ pub trait ILeveragedMarket<TState> {
     fn get_total_backing(self: @TState) -> u128;
     fn get_vault_free(self: @TState) -> u128;
     fn get_vault_shares(self: @TState, lp: ContractAddress) -> u128;
+    /// Total vault net worth that LP shares are priced against, plus the shares outstanding.
+    ///
+    /// `remove_liquidity` takes shares rather than STRK and pays `shares * capital / total`, so
+    /// without these two an LP cannot compute what a share is worth and is burning it blind. They are
+    /// separate views rather than one struct because the ratio is what matters and either alone is
+    /// meaningless.
+    fn get_vault_capital(self: @TState) -> u128;
+    fn get_vault_shares_total(self: @TState) -> u128;
+    /// STRK that burning `lp_shares` pays out right now, plus whether the vault can actually pay it.
+    ///
+    /// The contract computes the same number inside `remove_liquidity`, so quoting it here means an LP
+    /// reads the real figure rather than a client's reimplementation of the rounding. `payable` is
+    /// false when free collateral is short, which is the one way a correct withdrawal still reverts.
+    fn quote_remove_liquidity(self: @TState, lp_shares: u128) -> (u128, bool);
     fn get_insurance(self: @TState) -> u128;
     fn get_pool(self: @TState) -> ContractAddress;
     fn get_token(self: @TState) -> ContractAddress;

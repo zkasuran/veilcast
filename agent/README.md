@@ -119,7 +119,8 @@ Read-only, free, no keys:
 | `markets [--stake STRK]` | the live parimutuel board: questions, volumes, probabilities, payouts |
 | `flow --market <id>` | that market's bets from its event log: amounts and bearer keys, no addresses |
 | `lev-markets` | the leveraged board with live YES and NO prices |
-| `vault` | vault free collateral, backing, insurance and the solvency invariant |
+| `vault` | vault free collateral, backing, insurance, LP share price and the solvency invariant |
+| `vault-lp --lp ADDR` | one LP's shares, what a share is worth, what burning the holding would pay and whether the vault can pay it now |
 | `position --market --side --key` | one position marked to the live book: equity, P&L, health |
 | `mandate --market --side --key` | the authority a position carries, read from chain |
 | `quote --market --side --margin --leverage` | what an open would do, exactly as the contract computes it |

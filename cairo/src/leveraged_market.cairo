@@ -408,6 +408,25 @@ pub mod LeveragedMarket {
         fn get_token(self: @ContractState) -> ContractAddress {
             self.token.read()
         }
+        fn get_vault_capital(self: @ContractState) -> u128 {
+            self.vault_capital.read()
+        }
+        fn get_vault_shares_total(self: @ContractState) -> u128 {
+            self.vault_shares_total.read()
+        }
+        /// What burning `lp_shares` pays, computed the way `remove_liquidity` computes it.
+        ///
+        /// Deliberately the same `mul_div` in the same order rather than a fresh formula, so a quote
+        /// cannot round differently from the withdrawal it is quoting. An empty vault quotes zero
+        /// instead of dividing by zero.
+        fn quote_remove_liquidity(self: @ContractState, lp_shares: u128) -> (u128, bool) {
+            let total = self.vault_shares_total.read();
+            if total == 0 || lp_shares == 0 {
+                return (0, false);
+            }
+            let amount = mul_div(lp_shares, self.vault_capital.read(), total);
+            (amount, self.vault_free.read() >= amount)
+        }
         // PLACEHOLDER_LEVIMPL2
 
     }

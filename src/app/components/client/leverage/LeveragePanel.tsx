@@ -23,6 +23,7 @@ import {
     loadMandate,
     loadPosition,
     loadVault,
+    loadVaultShares,
     mandate as buildMandate,
     mandateStatus,
     markLevClosed,
@@ -33,8 +34,10 @@ import {
     openActions,
     priceBps,
     quoteOpen,
+    quoteRemoveLiquidity,
     removeLiquidityCall,
     saveLevCoupon,
+    sharePrice,
 } from "@/utils/leverage";
 import SelectWallet from "../WalletHandle/SelectWallet";
 import AmountInput from "../strk20/AmountInput";
@@ -54,7 +57,7 @@ function pct(bps: number): string {
 function leverageX(bps: number): string {
     return `${(bps / LEVERAGE_ONE).toFixed(1)}x`;
 }
-type Vault = { free: bigint; backing: bigint; insurance: bigint };
+type Vault = { free: bigint; backing: bigint; insurance: bigint; capital: bigint; sharesTotal: bigint };
 type Strk20 = ReturnType<typeof useStrk20>;
 
 /// Leveraged, isolated-margin positions on a private FPMM book. Opening and closing route through
@@ -410,11 +413,11 @@ function TradeView({
 }
 
 /// One label/value line, reused across the quote, positions and vault.
-function FactRow({ label, value }: { label: string; value: string }) {
+function FactRow({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
     return (
         <div className={styles.factRow}>
             <span className={styles.factLabel}>{label}</span>
-            <span className={styles.factValue}>{value}</span>
+            <span className={`${styles.factValue} ${warn ? styles.netBad : ""}`}>{value}</span>
         </div>
     );
 }
@@ -589,6 +592,53 @@ function VaultView({ vault, strk20, onDone }: { vault: Vault | null; strk20: Str
 
     const amount = parseStrk(amountStr);
 
+    // What this wallet holds, plus what burning it would actually pay.
+    //
+    // `remove_liquidity` takes shares rather than STRK, so an LP without these numbers is typing into a
+    // box whose units it cannot value. The quote comes from the contract rather than from a local
+    // multiplication, because the contract owns the rounding and is the thing that will honour it.
+    const [myShares, setMyShares] = useState<bigint | null>(null);
+    const [quote, setQuote] = useState<{ amount: bigint; payable: boolean } | null>(null);
+
+    useEffect(() => {
+        if (!strk20.hasLeverage || !strk20.address) {
+            setMyShares(null);
+            return;
+        }
+        let live = true;
+        loadVaultShares(strk20.provider, strk20.leverageAddress, strk20.address)
+            .then((s) => {
+                if (live) setMyShares(s);
+            })
+            .catch(() => {
+                // A read failure leaves the figure blank rather than showing a wrong one.
+            });
+        return () => {
+            live = false;
+        };
+    }, [strk20.hasLeverage, strk20.address, strk20.provider, strk20.leverageAddress, vault]);
+
+    useEffect(() => {
+        if (mode !== "remove" || amount === null || amount === 0n || !strk20.hasLeverage) {
+            setQuote(null);
+            return;
+        }
+        let live = true;
+        quoteRemoveLiquidity(strk20.provider, strk20.leverageAddress, amount)
+            .then((q) => {
+                if (live) setQuote(q);
+            })
+            .catch(() => {
+                if (live) setQuote(null);
+            });
+        return () => {
+            live = false;
+        };
+    }, [mode, amount, strk20.hasLeverage, strk20.provider, strk20.leverageAddress]);
+
+    // Shares this wallet cannot burn yet, because the collateral behind them is committed to a market.
+    const overSupplied = myShares !== null && amount !== null && mode === "remove" && amount > myShares;
+
     async function runLiquidity() {
         if (amount === null) return;
         setResult(null);
@@ -642,6 +692,24 @@ function VaultView({ vault, strk20, onDone }: { vault: Vault | null; strk20: Str
                 <FactRow label="Free to lend" value={vault ? `${formatStrk(vault.free)} STRK` : "…"} />
                 <FactRow label="Committed as backing" value={vault ? `${formatStrk(vault.backing)} STRK` : "…"} />
                 <FactRow label="Insurance fund" value={vault ? `${formatStrk(vault.insurance)} STRK` : "…"} />
+                <FactRow
+                    label="Share price"
+                    value={vault ? `${formatStrk(sharePrice(vault.capital, vault.sharesTotal))} STRK` : "…"}
+                />
+                <FactRow
+                    label="Your shares"
+                    value={
+                        !strk20.isConnected
+                            ? "connect to see"
+                            : myShares === null
+                              ? "…"
+                              : `${formatStrk(myShares)}${
+                                    vault && vault.sharesTotal > 0n
+                                        ? ` · ${formatStrk((myShares * sharePrice(vault.capital, vault.sharesTotal)) / 10n ** 18n)} STRK`
+                                        : ""
+                                }`
+                    }
+                />
             </div>
 
             <div className={styles.chips}>
@@ -665,8 +733,38 @@ function VaultView({ vault, strk20, onDone }: { vault: Vault | null; strk20: Str
                 disabled={busy}
             />
 
+            {mode === "remove" && quote ? (
+                <div className={styles.factRows}>
+                    <FactRow label="You would receive" value={`${formatStrk(quote.amount)} STRK`} />
+                    <FactRow
+                        label="Payable now"
+                        value={quote.payable ? "yes" : "no, the vault is committed"}
+                        warn={!quote.payable}
+                    />
+                </div>
+            ) : null}
+
+            {overSupplied ? (
+                <div className={styles.notice}>
+                    You hold {myShares === null ? "…" : formatStrk(myShares)} shares, so this would revert with
+                    INSUFFICIENT_VAULT. Burn that many or fewer.
+                </div>
+            ) : null}
+
+            {mode === "remove" && quote && !quote.payable && !overSupplied ? (
+                <div className={styles.notice}>
+                    Your shares are still worth this much, but the collateral behind them is lent out or seeded into a
+                    market. Withdraw a smaller slice. Waiting for positions to close frees the collateral.
+                </div>
+            ) : null}
             {strk20.isConnected ? (
-                <button className={styles.btnCta} disabled={amount === null || busy} onClick={runLiquidity}>
+                <button
+                    className={styles.btnCta}
+                    // Refuse locally what the contract would refuse anyway, so a doomed withdrawal costs
+                    // no gas. Both conditions are read from chain rather than guessed.
+                    disabled={amount === null || busy || overSupplied || (mode === "remove" && quote !== null && !quote.payable)}
+                    onClick={runLiquidity}
+                >
                     {busy ? "Submitting…" : mode === "add" ? "Add liquidity" : "Remove liquidity"}
                 </button>
             ) : (

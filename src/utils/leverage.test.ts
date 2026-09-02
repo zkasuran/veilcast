@@ -22,6 +22,7 @@ import {
     priceBps,
     quoteOpen,
     sell,
+    sharePrice,
     sidesOf,
 } from "./leverage";
 
@@ -230,5 +231,29 @@ describe("Mandate", () => {
         const none: Mandate = { agentKey: "0x0", stopPriceBps: 9999, takePriceBps: 1, payoutTarget: "0x0" };
         expect(mandateStatus(book, SIDE_YES, none).firable).toBe(false);
         expect(mandateStatus(book, SIDE_YES, none).reason).toBe("no mandate on this position");
+    });
+});
+
+describe("sharePrice", () => {
+    /// The number an LP reads before deciding. It is a display figure, so the test pins the scaling and
+    /// the empty case rather than pretending it is the binding quote, which is quote_remove_liquidity.
+    it("is 1:1 on an empty vault, because the first deposit mints one for one", () => {
+        expect(sharePrice(0n, 0n)).toBe(ONE);
+    });
+
+    it("is 1:1 while nothing has moved", () => {
+        expect(sharePrice(100n * ONE, 100n * ONE)).toBe(ONE);
+    });
+
+    it("rises when the vault earns and falls when it loses", () => {
+        // Fees accrue to capital without minting shares, so every share is worth more.
+        expect(sharePrice(110n * ONE, 100n * ONE)).toBe((11n * ONE) / 10n);
+        // Bad debt is the mirror image.
+        expect(sharePrice(90n * ONE, 100n * ONE)).toBe((9n * ONE) / 10n);
+    });
+
+    it("scales by 1e18 so a sub-unit price survives integer division", () => {
+        // A share worth a third of a token is 0.333... and must not floor to zero.
+        expect(sharePrice(ONE, 3n * ONE)).toBe(333333333333333333n);
     });
 });

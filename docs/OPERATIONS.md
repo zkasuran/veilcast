@@ -190,6 +190,32 @@ flags this as `alsoLiquidatable` on each row. Prioritise those.
 
 ---
 
+## Providing liquidity
+
+The vault is the counterparty every leveraged position borrows from. Providing to it is a public call, so
+anyone can be an LP. The reward is a share of the borrow fees the vault earns.
+
+The thing to understand before withdrawing: **`remove_liquidity` takes shares, not STRK.** Shares are
+minted one for one on the first deposit, then priced against `vault_capital`, which grows with fees and
+shrinks with bad debt the insurance fund could not absorb. So a share is not a token, which means the
+count in your wallet is not the amount you get back.
+
+```bash
+veilcast-agent vault                                  # free, backing, insurance, share price, solvency
+veilcast-agent vault-lp --lp 0x<yourAddress>          # your shares, their worth, what a withdrawal pays
+```
+
+`vault-lp` reports `worth` and `withdrawableNow` separately, because the gap between them is the one
+thing that surprises people. Free collateral caps a withdrawal. Seeding a market moves collateral out of
+it, so your shares can be worth their full slice while the vault cannot pay today. That is reported as
+`payable: false` rather than as a smaller balance, because the stake did not shrink.
+
+**A withdrawal that is not payable reverts with `INSUFFICIENT_VAULT`.** Both clients refuse it before
+sending, so it costs nothing to discover. Withdraw a smaller slice. Waiting for positions to close lets
+`vault.free` recover.
+
+---
+
 ## What to monitor
 
 Four numbers, all free to read.

@@ -124,7 +124,10 @@ function commandCatalog() {
             "--market <id>",
         ]),
         read("lev-markets", "The leveraged board with live YES and NO prices."),
-        read("vault", "Vault free collateral, backing, insurance and the solvency invariant."),
+        read("vault", "Vault free collateral, backing, insurance, LP share price and the solvency invariant."),
+        read("vault-lp", "One liquidity provider's stake: shares held, what a share is worth, what burning the whole holding would pay and whether the vault can pay it now. remove_liquidity takes shares rather than STRK, so this is how an LP values the unit it burns.", [
+            "--lp <address>",
+        ]),
         read("position", "One position marked to the live book: equity, P&L, health.", [
             "--market <id>",
             "--side <yes|no>",
@@ -143,7 +146,7 @@ function commandCatalog() {
         ]),
         read("keeper-scan", "Positions liquidatable now, best paying first.", ["--min-reward <STRK>"]),
         read("mandate-scan", "Mandates this agent holds and which are firable right now."),
-        read("verify", "Re-derive every claim in strk20.json straight from chain.", ["--file <path>"]),
+        read("verify", "Re-derive every claim in strk20.json straight from chain, then score each transaction under the program's rule: it counts only if it succeeded, the pool emitted an event in it and a contract listed in the file emitted one too. Exits 2 when the claims hold but too few count, 5 when a recorded claim does not hold.", ["--file <path>"]),
         write("shield", "Move STRK into the privacy pool.", ["--amount <STRK>", "--first for a fresh account"]),
         write("lev-open", "Open a leveraged position, optionally granting a mandate.", [
             "--market <id>",

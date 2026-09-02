@@ -159,3 +159,13 @@ export function parseStrk(input) {
     const amount = BigInt(whole === "" ? "0" : whole) * 10n ** 18n + BigInt(fraction.padEnd(18, "0"));
     return amount > 0n ? amount : null;
 }
+
+/// What one vault share is worth in the token's smallest unit, scaled by 1e18.
+///
+/// A display figure rather than a promise: the binding number is `quote_remove_liquidity`, which the
+/// contract computes. An empty vault is 1:1 by definition, because the first deposit mints shares one
+/// for one. Scaled so a share worth a fraction of a token does not floor to zero.
+export function sharePrice(capital, sharesTotal) {
+    if (sharesTotal === 0n) return 10n ** 18n;
+    return (capital * 10n ** 18n) / sharesTotal;
+}

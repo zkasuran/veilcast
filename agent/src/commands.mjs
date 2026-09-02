@@ -23,9 +23,11 @@ import {
     levMarketCount,
     levPosition,
     proveBlock,
+    quoteRemoveLiquidity,
     receiptFacts,
     countsUnderProgramRule,
     tokenBalance,
+    vaultShares,
     vaultState,
 } from "./chain.mjs";
 import {
@@ -36,6 +38,7 @@ import {
     parseStrk,
     priceBps,
     quoteOpen,
+    sharePrice,
 } from "./pricing.mjs";
 import {
     SIDE_NO,
@@ -487,16 +490,75 @@ export async function vault({ config }) {
             obligations: state.obligations,
             balance: state.balance,
             solvent: state.solvent,
+            capital: state.capital,
+            sharesTotal: state.sharesTotal,
+            sharePrice: sharePrice(state.capital, state.sharesTotal),
             readable: {
                 free: `${formatStrk(state.free)} STRK`,
                 backing: `${formatStrk(state.backing)} STRK`,
                 insurance: `${formatStrk(state.insurance)} STRK`,
                 balance: `${formatStrk(state.balance)} STRK`,
+                capital: `${formatStrk(state.capital)} STRK`,
+                sharePrice: `${formatStrk(sharePrice(state.capital, state.sharesTotal))} STRK per share`,
             },
         },
         state.solvent
             ? "balance covers free + backing + insurance, which is the invariant the Cairo suite fuzzes."
             : "Balance does not cover obligations. Stop trading and report this."
+    );
+}
+
+/// An LP's position in the vault: shares held, what they are worth, what a withdrawal would pay.
+///
+/// This exists because `remove_liquidity` takes shares rather than STRK. Without a quote an LP is
+/// burning a unit it cannot value. The one way a correct withdrawal still reverts is free
+/// collateral being short, which is a fact about the vault rather than about the LP. Both come from the
+/// contract, so the number reported is the number the withdrawal will honour.
+export async function vaultLp({ config, args }) {
+    requireLeverage(config, "vault-lp");
+    const lp = args.lp ?? args.address;
+    if (!lp) {
+        const error = new Error("Which liquidity provider? Pass --lp <address>.");
+        error.code = "NO_LP_ADDRESS";
+        throw error;
+    }
+    const [state, held] = await Promise.all([vaultState(config), vaultShares(config, lp)]);
+    const price = sharePrice(state.capital, state.sharesTotal);
+    const worth = (held * price) / 10n ** 18n;
+    // Quoting the whole holding is the question an LP actually has. A smaller slice may well be payable
+    // when the full one is not, so the refusal names that rather than reading as "your money is gone".
+    const full = held > 0n ? await quoteRemoveLiquidity(config, held) : { amount: 0n, payable: false };
+    const withdrawableNow = full.payable ? full.amount : state.free < worth ? state.free : worth;
+    return ok(
+        "vault-lp",
+        {
+            lp,
+            shares: held,
+            sharesTotal: state.sharesTotal,
+            ownershipBps: state.sharesTotal > 0n ? Number((held * 10_000n) / state.sharesTotal) : 0,
+            sharePrice: price,
+            worth,
+            quote: full,
+            withdrawableNow,
+            vault: {
+                free: state.free,
+                backing: state.backing,
+                insurance: state.insurance,
+                capital: state.capital,
+                solvent: state.solvent,
+            },
+            readable: {
+                shares: formatStrk(held),
+                sharePrice: `${formatStrk(price)} STRK per share`,
+                worth: `${formatStrk(worth)} STRK`,
+                withdrawableNow: `${formatStrk(withdrawableNow)} STRK`,
+            },
+        },
+        held === 0n
+            ? "This address holds no vault shares. `add_liquidity` is a public call, so anyone can provide."
+            : full.payable
+              ? "The whole holding is withdrawable right now."
+              : "The shares are worth this much, but not all of it is payable: the collateral behind them is lent out or seeded into a market. Withdraw a smaller slice or wait for positions to close."
     );
 }
 

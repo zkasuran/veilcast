@@ -20,7 +20,7 @@ graph TB
     end
 
     subgraph Agent["Any machine (an agent)"]
-        CLI[veilcast-agent<br/>20 verbs, JSON out]
+        CLI[veilcast-agent<br/>21 verbs, JSON out]
         AgentKey[(agent key<br/>mode 0600)]
         OHTTP[OHTTP proving<br/>and discovery]
     end
@@ -177,7 +177,22 @@ Key functions:
   resolve / void                                       // resolver settles or cancels
   position_equity(...) → (value, equity, health)       // mark a position to the live book
   get_mandate(market, side, position_key) → Mandate    // read what authority a position carries
+  quote_remove_liquidity(lp_shares) → (amount, payable)// what a withdrawal pays, plus whether it can
 ```
+
+#### Pricing an LP share
+
+`remove_liquidity` takes **shares**, not STRK. It pays `lp_shares * vault_capital / vault_shares_total`.
+So a share cannot be valued without the ratio. An LP asked to type a share count into a box is being
+asked to guess. `get_vault_capital` and `get_vault_shares_total` expose the two terms;
+`quote_remove_liquidity` returns the payout the withdrawal will actually make, using the same `mul_div`
+in the same order, so a quote cannot round differently from the thing it quotes.
+
+The second return value matters as much as the first. Free collateral is what caps a withdrawal, and
+seeding a market moves collateral out of it, so shares can be worth their full slice while the vault
+cannot pay today. `payable: false` says exactly that rather than implying the stake shrank. Both clients
+refuse a doomed withdrawal locally, so it costs no gas: the web app disables the button, and
+`veilcast-agent vault-lp --lp <address>` reports `withdrawableNow` beside `worth`.
 
 #### The Mandate: delegation without custody
 
@@ -429,9 +444,9 @@ shared vectors with the Cairo contract and the app, so all three implementations
 
 | Layer | Framework | Count | What's covered |
 |-------|-----------|-------|---------------|
-| Cairo contracts | snForge 0.63 | 66 | Full bet, resolve and claim path, access control, fee math, both resolvers, the leveraged market's open, close and liquidate lifecycle, plus 12 fuzz tests over the FPMM, the solvency invariant and the agent trust boundary |
-| TypeScript | Vitest 4.1 | 141 | Calldata encoding, claim and close signatures, parimutuel and FPMM math, leverage quotes and position marks, mandate validation, coupon vault (AES-GCM), board reads, event parsing, portfolio P&L, SDK |
-| Agent runtime | node:test | 58 | The pricing port against Cairo vectors, calldata layouts, the raw-felt board decoder against literal mainnet felts, the custody guard, host detection and every generated skill file's shape |
+| Cairo contracts | snForge 0.63 | 69 | Full bet, resolve and claim path, access control, fee math, both resolvers, the leveraged market's open, close and liquidate lifecycle, plus 12 fuzz tests over the FPMM, the solvency invariant and the agent trust boundary, then LP share pricing against what a withdrawal actually pays |
+| TypeScript | Vitest 4.1 | 145 | Calldata encoding, claim and close signatures, parimutuel and FPMM math, leverage quotes and position marks, mandate validation, coupon vault (AES-GCM), board reads, event parsing, portfolio P&L, LP share pricing, SDK |
+| Agent runtime | node:test | 70 | The pricing port against Cairo vectors, calldata layouts, the raw-felt board decoder against literal mainnet felts, the custody guard, the program's eligibility rule, LP share pricing, host detection and every generated skill file's shape |
 
 **Pinned vectors.** The claim and close message hashes are computed in four independent
 implementations (Cairo, the SDK, the app, the agent runtime) and asserted against the same hardcoded

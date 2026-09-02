@@ -470,22 +470,59 @@ export async function loadPosition(
 
 /// The vault's free collateral, its committed backing and its insurance fund. With the contract's
 /// token balance these are the solvency invariant the Cairo suite fuzzes.
+///
+/// `capital` and `sharesTotal` come along because they are what an LP share is priced against:
+/// `remove_liquidity` takes shares rather than STRK, so without the ratio a share cannot be valued.
 export async function loadVault(
     provider: ProviderInterface,
     address: string
-): Promise<{ free: bigint; backing: bigint; insurance: bigint }> {
+): Promise<{ free: bigint; backing: bigint; insurance: bigint; capital: bigint; sharesTotal: bigint }> {
     const contract = leveragedMarketContract(address, provider);
-    const [free, backing, insurance] = await Promise.all([
+    const [free, backing, insurance, capital, sharesTotal] = await Promise.all([
         contract.call("get_vault_free", []),
         contract.call("get_total_backing", []),
         contract.call("get_insurance", []),
+        contract.call("get_vault_capital", []),
+        contract.call("get_vault_shares_total", []),
     ]);
-    return { free: BigInt(free as bigint), backing: BigInt(backing as bigint), insurance: BigInt(insurance as bigint) };
+    return {
+        free: BigInt(free as bigint),
+        backing: BigInt(backing as bigint),
+        insurance: BigInt(insurance as bigint),
+        capital: BigInt(capital as bigint),
+        sharesTotal: BigInt(sharesTotal as bigint),
+    };
 }
 
 /// Vault shares held by one liquidity provider.
 export async function loadVaultShares(provider: ProviderInterface, address: string, lp: string): Promise<bigint> {
     return BigInt((await leveragedMarketContract(address, provider).call("get_vault_shares", [lp])) as bigint);
+}
+
+/// What burning `lpShares` pays right now, plus whether the vault can actually pay it.
+///
+/// Asked of the chain rather than computed here on purpose: the contract owns the rounding, so a client
+/// that reimplements `mul_div` will eventually disagree with it by a wei and quote a number the
+/// withdrawal does not honour.
+export async function quoteRemoveLiquidity(
+    provider: ProviderInterface,
+    address: string,
+    lpShares: bigint
+): Promise<{ amount: bigint; payable: boolean }> {
+    const raw = (await leveragedMarketContract(address, provider).call("quote_remove_liquidity", [
+        lpShares,
+    ])) as unknown[];
+    return { amount: BigInt(raw[0] as bigint), payable: BigInt(raw[1] as bigint) !== 0n };
+}
+
+/// What one share is worth in STRK, scaled by 1e18 so it survives integer division.
+///
+/// Pure, because it is a display figure rather than a promise: the number that binds is
+/// `quoteRemoveLiquidity`. An empty vault is 1:1 by definition, since the first deposit mints shares
+/// one for one.
+export function sharePrice(capital: bigint, sharesTotal: bigint): bigint {
+    if (sharesTotal === 0n) return 10n ** 18n;
+    return (capital * 10n ** 18n) / sharesTotal;
 }
 
 // ── Public calls (wallet.execute): liquidity and the market's public admin ──

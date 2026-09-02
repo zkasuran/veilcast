@@ -22,7 +22,8 @@ Read-only, free, no keys needed:
   markets    [--stake STRK]  the live parimutuel board: questions, odds and what a stake pays
   flow       --market <id>   that market's bet history, read from its own event log
   lev-markets               the leveraged board with live prices
-  vault                     vault free, backing, insurance and the solvency invariant
+  vault                     vault free, backing, insurance, share price and the solvency invariant
+  vault-lp --lp ADDR        one LP's shares, what they are worth and what a withdrawal would pay
   position   --market --side --key       one leveraged position, marked to the book
   mandate    --market --side --key       the authority a position carries
   quote      --market --side --margin --leverage   what an open would do, exactly as the contract
@@ -107,6 +108,7 @@ const HANDLERS = {
     flow: commands.flow,
     "lev-markets": commands.levMarkets,
     vault: commands.vault,
+    "vault-lp": commands.vaultLp,
     position: commands.position,
     mandate: commands.mandateCommand,
     quote: commands.quote,
@@ -151,9 +153,12 @@ async function main() {
             error.code === "PRIVACY_SDK_UNLOADABLE" ||
             error.code === "NO_AGENT_KEY" ||
             error.code === "NO_ACCOUNTS_FILE" ||
-            error.code === "NO_SUCH_ACCOUNT"
+            error.code === "NO_SUCH_ACCOUNT" ||
+            // A contract that is not deployed on this network is a setting to fix, not a chain fault.
+            // Reporting it as a chain error would tell an agent to retry something that cannot succeed.
+            error.code === "LEVERAGE_NOT_DEPLOYED"
                 ? EXIT.notConfigured
-                : error.code === "OWNER_KEY_REFUSED"
+                : error.code === "OWNER_KEY_REFUSED" || error.code === "NO_LP_ADDRESS"
                   ? EXIT.badRequest
                   : felt
                     ? EXIT.refused

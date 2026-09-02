@@ -103,9 +103,17 @@
     },
     {
       "name": "vault",
-      "summary": "Vault free collateral, backing, insurance and the solvency invariant.",
+      "summary": "Vault free collateral, backing, insurance, LP share price and the solvency invariant.",
       "spends": false,
       "args": []
+    },
+    {
+      "name": "vault-lp",
+      "summary": "One liquidity provider's stake: shares held, what a share is worth, what burning the whole holding would pay and whether the vault can pay it now. remove_liquidity takes shares rather than STRK, so this is how an LP values the unit it burns.",
+      "spends": false,
+      "args": [
+        "--lp <address>"
+      ]
     },
     {
       "name": "position",
@@ -154,16 +162,11 @@
     },
     {
       "name": "verify",
-      "summary": "Re-derive every claim in strk20.json straight from chain, then score each transaction under the program's rule: it counts only if it succeeded, the pool emitted an event in it and a contract listed in the file emitted one too.",
+      "summary": "Re-derive every claim in strk20.json straight from chain, then score each transaction under the program's rule: it counts only if it succeeded, the pool emitted an event in it and a contract listed in the file emitted one too. Exits 2 when the claims hold but too few count, 5 when a recorded claim does not hold.",
       "spends": false,
       "args": [
         "--file <path>"
-      ],
-      "exit": {
-        "0": "every claim holds and the countable set clears the bar",
-        "2": "claims hold but too few transactions count",
-        "5": "a recorded claim does not hold against chain"
-      }
+      ]
     },
     {
       "name": "shield",

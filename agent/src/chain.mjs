@@ -55,6 +55,9 @@ export const SELECTORS = {
     getTotalBacking: selector("get_total_backing"),
     getInsurance: selector("get_insurance"),
     getVaultShares: selector("get_vault_shares"),
+    getVaultCapital: selector("get_vault_capital"),
+    getVaultSharesTotal: selector("get_vault_shares_total"),
+    quoteRemoveLiquidity: selector("quote_remove_liquidity"),
     balanceOf: selector("balanceOf"),
 };
 
@@ -141,14 +144,41 @@ export async function levMandate(config, marketId, side, positionKey) {
 /// The vault's free collateral, committed backing and insurance fund, plus the contract's actual
 /// token balance. Together these are the solvency invariant: balance must cover the three.
 export async function vaultState(config) {
-    const [free, backing, insurance, balance] = await Promise.all([
+    const [free, backing, insurance, balance, capital, sharesTotal] = await Promise.all([
         callView(config, config.leverage, SELECTORS.getVaultFree).then(([value]) => BigInt(value)),
         callView(config, config.leverage, SELECTORS.getTotalBacking).then(([value]) => BigInt(value)),
         callView(config, config.leverage, SELECTORS.getInsurance).then(([value]) => BigInt(value)),
         tokenBalance(config, config.leverage),
+        callView(config, config.leverage, SELECTORS.getVaultCapital).then(([value]) => BigInt(value)),
+        callView(config, config.leverage, SELECTORS.getVaultSharesTotal).then(([value]) => BigInt(value)),
     ]);
     const obligations = free + backing + insurance;
-    return { free, backing, insurance, balance, obligations, solvent: balance >= obligations };
+    return {
+        free,
+        backing,
+        insurance,
+        balance,
+        capital,
+        sharesTotal,
+        obligations,
+        solvent: balance >= obligations,
+    };
+}
+
+/// Vault shares held by one address.
+export async function vaultShares(config, lp) {
+    const [shares] = await callView(config, config.leverage, SELECTORS.getVaultShares, [lp]);
+    return BigInt(shares);
+}
+
+/// What burning `lpShares` pays right now, plus whether the vault can actually pay it.
+///
+/// Asked of the contract rather than recomputed, because the contract owns the rounding and is the
+/// thing that will honour the number. A client that reimplements the division eventually quotes a
+/// figure the withdrawal refuses.
+export async function quoteRemoveLiquidity(config, lpShares) {
+    const raw = await callView(config, config.leverage, SELECTORS.quoteRemoveLiquidity, [lpShares]);
+    return { amount: BigInt(raw[0]), payable: BigInt(raw[1]) !== 0n };
 }
 
 /// Every `PositionOpened` event the leveraged market has emitted, which is how a keeper enumerates
