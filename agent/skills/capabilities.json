@@ -154,11 +154,16 @@
     },
     {
       "name": "verify",
-      "summary": "Re-derive every claim in strk20.json straight from chain.",
+      "summary": "Re-derive every claim in strk20.json straight from chain, then score each transaction under the program's rule: it counts only if it succeeded, the pool emitted an event in it and a contract listed in the file emitted one too.",
       "spends": false,
       "args": [
         "--file <path>"
-      ]
+      ],
+      "exit": {
+        "0": "every claim holds and the countable set clears the bar",
+        "2": "claims hold but too few transactions count",
+        "5": "a recorded claim does not hold against chain"
+      }
     },
     {
       "name": "shield",

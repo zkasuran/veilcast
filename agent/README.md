@@ -126,7 +126,7 @@ Read-only, free, no keys:
 | `keeper-scan [--min-reward STRK]` | positions liquidatable now, best paying first |
 | `mandate-scan` | mandates this agent holds and which are firable |
 | `agent-key` | this agent's public key, for an owner to name in a mandate |
-| `verify [--file strk20.json]` | re-derive every recorded claim straight from chain |
+| `verify [--file strk20.json]` | re-derive every recorded claim straight from chain, then score each transaction under the program's rule |
 
 Money, dry run by default:
 
