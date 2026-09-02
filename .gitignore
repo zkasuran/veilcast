@@ -4,3 +4,8 @@ node_modules/
 tsconfig.tsbuildinfo
 next-env.d.ts
 out/
+
+# Submission and form-fill pages carry personal data and form internals. Never pushed.
+/submit/
+DEMO-*.mp4
+upload-*/
