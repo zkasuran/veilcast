@@ -17,9 +17,9 @@ const spaceMono = Space_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Veilcast · delegate execution, never custody',
+  title: 'Veilcast · private prediction markets you or an agent can trade',
   description:
-    'A private, leveraged prediction market on Starknet that an AI agent can trade for you and structurally cannot steal from. Public volume so the odds mean something, anonymous bettors so they stay honest, plus a bounded on-chain mandate so delegating execution never delegates custody.',
+    'A private prediction market on Starknet. Public volume so the odds mean something, anonymous bettors so they stay honest. Trade it from a browser wallet. Trade it headlessly from a process. An agent carries a bounded mandate written into the contract, so it can close your position and cannot take your money.',
 }
 
 /**

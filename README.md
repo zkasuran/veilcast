@@ -4,16 +4,16 @@
 
 <h1 align="center">Veilcast</h1>
 
-<h3 align="center">Delegate execution. Never custody.</h3>
+<h3 align="center">Private prediction markets.<br />Trade them yourself. Or hand an agent a mandate it cannot abuse.</h3>
 
 <p align="center">
-  <strong>A private, leveraged prediction market on Starknet that an AI agent can trade for you,<br />
-  and structurally cannot steal from.</strong>
+  <strong>Visible odds, invisible bettors (RFP-07). One market, two clients:<br />
+  a wallet for a person, a headless runtime for a process, the same contract underneath.</strong>
 </p>
 
 <p align="center">
-  <sub>Visible odds, invisible bettors (RFP-07), plus the part nobody else built:<br />
-  a bounded authority you hand an agent, enforced by the contract rather than by trust.</sub>
+  <sub><b>Delegate execution. Never custody.</b> The bounded authority is written to contract storage<br />
+  at open, so an agent closing your position has nowhere to put a different recipient.</sub>
 </p>
 
 <p align="center">
@@ -50,10 +50,10 @@
 
 | | |
 |---|---|
-| **What** | A parimutuel prediction market where amounts are public (so the odds are honest) and identities are private (so the flow is honest) |
+| **What** | A parimutuel prediction market where amounts are public (so the odds are honest) and identities are private (so the flow is honest). One market, two clients: a browser wallet for a person, a headless runtime for a process |
 | **RFP match** | [RFP-07: prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
 | **Live on mainnet** | Market, Pragma resolver and committee resolver deployed. **Twelve pool transactions, three of which score** under the program's rule that a transaction must carry an event from a contract we list. Every claim re-derivable from chain by running one command |
-| **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money** |
+| **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money**, fuzzed and devnet-rehearsed, awaiting its mainnet declare |
 | **Agent-drivable** | The only entry in the field an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes, plus an **MCP server** so a browser host with no shell (claude.ai, an IDE panel) can trade and take alerts without leaving the editor |
 | **Verify us, do not trust us** | `node agent/cli.mjs verify` re-derives every recorded transaction and class hash straight from chain, then exits non-zero if one fails |
 | **Tests** | **318 green.** 69 Cairo with zero warnings (12 of them fuzz), 145 TypeScript, 104 agent runtime |
@@ -66,8 +66,10 @@
 needs open volume, which breaks the moment whales can be tracked. STRK20 gives exactly the split that
 fixes it: **amounts public so the odds are real, identities private so the flow stays honest.**
 
-**2.** On top of that we built leverage, priced by an auditable integer AMM, where reserves are backed
-one for one so the contract itself cannot be drained.
+**2.** One market, two clients. A person trades it from a browser wallet that keeps their viewing key
+inside the wallet. A process trades the same contract headlessly, proving over OHTTP with no browser at
+all. Both build byte-identical calldata, pinned by a hash asserted in the Cairo suite, the TypeScript
+suite and the agent suite, so the two can never drift apart.
 
 **3.** Then the part nobody else built. You can hand an untrusted agent the ability to close your
 position. It **cannot take your money.** Not because it promises not to: the contract reads the payout
@@ -76,6 +78,12 @@ address from storage, so the agent's calldata has nowhere to put a recipient.
 That is the whole product: **delegate execution, never custody.** A stolen agent key buys an attacker
 nothing but doing what you already asked for, at a price the market actually reached, paying your own
 address.
+
+> **Where each half runs today.** The parimutuel market is live on Starknet mainnet and the private
+> betting path has three verified mainnet transactions behind it. The mandate lives in
+> `LeveragedMarket`, which is built, fuzzed and rehearsed end to end against a devnet node but **not yet
+> deployed to mainnet**, so the delegation story is provable in the test suite rather than on chain
+> today. The Leverage tab says so rather than faking a book.
 
 ## What it is
 
