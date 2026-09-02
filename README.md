@@ -222,15 +222,20 @@ running a keeper or a watcher with measured costs.
 
 ## The building journey
 
-Nineteen days, five phases. Each one shipped something the next one needed. Each one also taught
+Twenty days, six phases. Each one shipped something the next one needed. Each one also taught
 something that changed the design. The commits are the record; this is the reasoning behind them.
 
 ```
-Aug 14 ─────────── Aug 21 ─────── Aug 26 ─────── Aug 27 ─────── Sep 02
-  │                   │              │              │              │
-  scaffold         product        mainnet        leverage        agents
-  the market       the board      the money      the engine      the mandate
+Aug 14 ────── Aug 21 ────── Aug 26 ────── Aug 27 ────── Aug 28 ────── Sep 02
+  │              │             │             │             │             │
+ scaffold      product       mainnet      leverage       agent         mandate
+ the market    the board     the money    the engine     runtime      and publish
 ```
+
+The last two phases are one arc pulled apart by a hard constraint. The agent runtime went in on
+Aug 27 and 28. The trust primitive it needed to be safe landed after it, because the runtime is what
+made the question urgent: once a process can trade on its own, what stops it stealing? So the phases are
+in the order the work actually happened, not the order that reads tidily.
 
 ---
 
@@ -306,28 +311,56 @@ Then we fuzzed it rather than asserting it: a buy never shrinks the constant pro
 never prints money, the two sides always price a coin, plus solvency survives random open, close and
 liquidate sequences.
 
-### Phase 5 · Agents, Sep 2
+### Phase 5 · The agent runtime, Aug 27 to 28
 
-The headless unlock made something possible that no rival can build. It also raised the question the
-project now turns on: **if an agent can trade, what stops it stealing?**
+The headless unlock from Phase 3 made something possible that no rival in the field can build, so this
+phase was about turning a pile of proven recipes into something another process can actually drive.
 
-The answer is the **mandate**. A bounded authority the owner attaches at open: an agent key, a stop and
-take price band, plus a payout address. All three go to storage and are checked on every agent close.
-The agent's calldata is six felts and contains no recipient and no price, because *a field an agent
-could fill is a field an agent could abuse.*
+The shape mattered more than the feature list. An agent is not a human with a smaller screen, so the
+interface is built for a parser rather than a reader: **one JSON object per invocation on stdout**,
+progress on stderr, plus exit codes distinct enough to branch on without reading text. Code `2` means a
+guard said no, which is not a malfunction and is worth retrying later. Code `3` means the setup is wrong
+and `doctor` will name the fix.
+
+Then the rule that shapes everything else: **every command that can spend is a dry run unless
+`--confirm` is passed.** That is not caution for its own sake. The prover simulates server-side and
+rejects a bad invocation before any gas is spent, so a dry run genuinely validates rather than merely
+declining to act. An agent gets a free correctness check on every money operation, which is the
+opposite of the usual tradeoff.
+
+The pieces that made it a runtime rather than a script: the FPMM and the leverage maths ported to
+JavaScript so an agent can quote and plan for free, keeper and mandate scans that enumerate positions
+from the event log (the contract has no list, because positions are keyed by bearer coupons), and
+`install.mjs`, which generates every host's skill pack from **one manifest** so a Claude Code skill, an
+openclaw tool and a Hermes capability list cannot drift apart.
+
+Also the module that took the longest to get right for the least glamour: the parimutuel board decoded
+straight from raw felts. A `MarketView` embeds a `ByteArray`, so the fields after the question have no
+fixed offset and the felt stream has to be walked. Doing it that way means the runtime carries no ABI
+file and cannot drift from the deployment. Its test pins the **literal 27 felts mainnet returns**.
+
+### Phase 6 · The mandate, then shipping it, Sep 2
+
+The runtime is what made the real question urgent. Once a process can trade on its own, **what stops it
+stealing?**
+
+The answer is the **mandate**: a bounded authority the owner attaches at open, carrying an agent key, a
+stop and take price band, plus a payout address. All three go to contract storage and are checked on
+every agent close. The agent's calldata is six felts and contains no recipient and no price, because
+*a field an agent could fill is a field an agent could abuse.*
 
 So the worst a stolen agent key buys is doing what the owner already asked for, at a price the market
-actually reached, paying the owner's own address. That is what makes an agent key safe to hand out,
-and it is fuzzed across random stranger keys, random out-of-band prices, random sizes and both
-signature-replay directions.
+actually reached, paying the owner's own address. That is what makes an agent key safe to hand out, and
+it is fuzzed across random stranger keys, random out-of-band prices, random sizes and both
+signature-replay directions rather than asserted once.
 
-On top of it: a 20 verb runtime, dry run unless `--confirm`, one JSON object per invocation, plus skills
-for Claude Code, openclaw and Hermes generated from a single manifest so they cannot disagree.
-
-Then the last step, which is easy to skip and would have made the rest a lie: **both packages went to
-npm.** A runtime a judge has to clone is not an agent product, it is a repository. `npx veilcast-agent
-markets` now works from a bare shell on a machine that has never seen this project, which is the only
-version of that claim worth making.
+Then the last step, easy to skip and it would have made the rest a lie: **both packages went to npm.**
+The README's headline command was `npx veilcast-agent markets`, which was false while nothing was
+published. A runtime a judge has to clone is a repository rather than an agent product. It now works
+from a bare shell on a machine that has never seen this project. Trying to publish immediately
+surfaced three defects that testing had not: a README listed in `files[]` that did not exist, a CLI that
+was not executable so the `bin` entry would have failed on install, plus a module missing from the
+package entry point so the documented example could not run.
 
 ---
 
