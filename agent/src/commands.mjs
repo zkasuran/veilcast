@@ -1176,8 +1176,13 @@ export async function verify({ config, args }) {
     // Listing contracts therefore raises our own bar, so score against the list in the file rather than
     // against the one market address the config happens to know.
     const ourAddresses = (manifest.contracts ?? []).map((entry) => entry.address).filter(Boolean);
+    // The hub reads only the first ten hashes and ignores the rest, so a qualifying transaction sitting
+    // in slot eleven scores nothing. Mirror the window rather than checking everything and reporting a
+    // total the hub will not agree with.
+    const WINDOW = 10;
+    const listed = manifest.transactions ?? [];
     const transactions = [];
-    for (const txHash of manifest.transactions ?? []) {
+    for (const txHash of listed.slice(0, WINDOW)) {
         try {
             const facts = await receiptFacts(config, txHash, ourAddresses);
             const needsOurs = ourAddresses.length > 0;
@@ -1241,7 +1246,9 @@ export async function verify({ config, args }) {
         transactions,
         contracts,
         summary: {
+            transactionsListed: listed.length,
             transactionsChecked: transactions.length,
+            beyondTheWindow: Math.max(0, listed.length - WINDOW),
             contractsChecked: contracts.length,
             countable: countable.length,
             required: REQUIRED,

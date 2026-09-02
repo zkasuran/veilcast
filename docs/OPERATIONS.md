@@ -198,6 +198,27 @@ Seeing it false on mainnet would mean something the tests do not model, which is
 
 ---
 
+## What the hub actually checks
+
+Three facts about the scoring script, read from it rather than assumed, because each one has a way of
+costing a submission that looks complete.
+
+**A transaction counts only if one of your own contracts is in it.** Touching the pool proves somebody
+used STRK20. A shield does that without involving your code at all. The hub looks for an event from
+an address you listed in `contracts`, then failing that scans the raw calldata for one, so a forwarding
+contract that emits nothing still counts. A project that deploys nothing is judged on the pool alone.
+`veilcast-agent verify` applies the same rule and reports it per transaction.
+
+**Only the first ten hashes are read.** A qualifying transaction in slot eleven scores nothing, so keep
+the ones that count at the top of the list. `verify` mirrors the window and reports `beyondTheWindow`
+rather than counting hashes the hub will ignore.
+
+**Being listed is not being submitted.** The hub gates on three things together: a live demo, a
+`demo_video` plus three verified mainnet transactions. Missing any one leaves the row incomplete however
+good the code is.
+
+---
+
 ## Failure modes and recovery
 
 **A money command returns exit 2.** The answer was no. A band was not met or a position was healthy.
