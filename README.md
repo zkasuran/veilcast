@@ -15,6 +15,8 @@
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/pages.yml?label=web&style=flat-square" alt="Web build" /></a>
   <img src="https://img.shields.io/badge/tests-265%20passing-brightgreen?style=flat-square" alt="265 tests" />
   <img src="https://img.shields.io/badge/agent-Claude%20Code%20%C2%B7%20openclaw%20%C2%B7%20Hermes-8b5cf6?style=flat-square" alt="Agent skills" />
+  <a href="https://www.npmjs.com/package/veilcast-agent"><img src="https://img.shields.io/npm/v/veilcast-agent?style=flat-square&label=veilcast-agent" alt="veilcast-agent on npm" /></a>
+  <a href="https://www.npmjs.com/package/veilcast-sdk"><img src="https://img.shields.io/npm/v/veilcast-sdk?style=flat-square&label=veilcast-sdk" alt="veilcast-sdk on npm" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
 </p>
 
@@ -48,6 +50,7 @@
 | **Agent-drivable** | The only entry in the field an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes |
 | **Verify us, do not trust us** | `node agent/cli.mjs verify` re-derives every recorded transaction and class hash straight from chain, then exits non-zero if one fails |
 | **Tests** | **265 green.** 66 Cairo with zero warnings (12 of them fuzz), 141 TypeScript, 58 agent runtime |
+| **Published** | [`veilcast-agent`](https://www.npmjs.com/package/veilcast-agent) and [`veilcast-sdk`](https://www.npmjs.com/package/veilcast-sdk) are on npm, so `npx veilcast-agent markets` works from a bare shell |
 | **Stack** | Cairo 2.20 · Next.js 16 · TypeScript · a dependency-light Node agent runtime · STRK20 Wallet API · Pragma |
 
 **The one-minute version.** A prediction market only means something if its price signal is honest, and
@@ -321,6 +324,11 @@ signature-replay directions.
 On top of it: a 20 verb runtime, dry run unless `--confirm`, one JSON object per invocation, plus skills
 for Claude Code, openclaw and Hermes generated from a single manifest so they cannot disagree.
 
+Then the last step, which is easy to skip and would have made the rest a lie: **both packages went to
+npm.** A runtime a judge has to clone is not an agent product, it is a repository. `npx veilcast-agent
+markets` now works from a bare shell on a machine that has never seen this project, which is the only
+version of that claim worth making.
+
 ---
 
 ### What the work caught
@@ -497,9 +505,14 @@ Or use the automated CI workflow: **Actions → Deploy contracts → Run workflo
 
 ## SDK
 
-[`sdk/`](sdk/) is `veilcast-sdk` — a framework-free TypeScript package that reads and drives
-Veilcast from any app or bot. It ships the contract ABIs, coupon and claim signing, pool action
-lists, market reads, and payout maths. Depends only on starknet.js, works in Node and the browser.
+[`veilcast-sdk`](https://www.npmjs.com/package/veilcast-sdk) is a framework-free TypeScript package
+that reads and drives Veilcast from any app or bot. It ships the contract ABIs, coupon and claim
+signing, pool action lists, market reads and the payout maths. It depends only on starknet.js and works
+in Node and the browser.
+
+```bash
+npm install veilcast-sdk starknet
+```
 
 ```ts
 import { loadBoard, newCoupon, betActions, formatStrk } from "veilcast-sdk";

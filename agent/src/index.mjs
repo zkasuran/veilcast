@@ -86,4 +86,18 @@ export {
     notes,
     waitForNote,
 } from "./pool.mjs";
+export {
+    feeOn,
+    impliedProbability,
+    settledPayout,
+    quotePayout,
+    payoutMultiple,
+    positionStatus,
+    decodeMarketViews,
+    board,
+    market,
+    stakeOf,
+    betHistory,
+    DEPLOYED_AT,
+} from "./market.mjs";
 export { scanKeeper, scanMandates } from "./scan.mjs";
