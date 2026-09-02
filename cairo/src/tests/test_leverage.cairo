@@ -931,10 +931,10 @@ fn a_mandate_must_be_well_formed() {
 
 /// An LP must be able to price a share before burning it.
 ///
-/// `remove_liquidity` takes shares and pays `shares * capital / total`, so the two ratio terms and the
-/// quote are the difference between a considered withdrawal and a blind one. The quote is asserted
-/// against what the withdrawal actually pays rather than against a recomputation, because a quote that
-/// rounds differently from the thing it quotes is worse than no quote.
+/// `remove_liquidity` takes shares and pays `shares * capital / total`, so the two ratio terms and
+/// the quote are the difference between a considered withdrawal and a blind one. The quote is
+/// asserted against what the withdrawal actually pays rather than against a recomputation, because
+/// a quote that rounds differently from the thing it quotes is worse than no quote.
 #[test]
 fn an_lp_can_price_a_share_before_burning_it() {
     let env = setup();
@@ -962,8 +962,8 @@ fn an_lp_can_price_a_share_before_burning_it() {
 /// Committed collateral is not withdrawable, so the quote says so before the revert.
 ///
 /// Seeding a market moves free collateral into the AMM. The shares still exist and are still worth
-/// their pro-rata slice, so the honest answer is not "you own less" but "the vault cannot pay you right
-/// now", which is exactly what `payable == false` means.
+/// their pro-rata slice, so the honest answer is not "you own less" but "the vault cannot pay you
+/// right now", which is exactly what `payable == false` means.
 #[test]
 fn a_quote_reports_unpayable_when_the_vault_is_committed() {
     let env = setup();

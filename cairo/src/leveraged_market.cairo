@@ -416,9 +416,9 @@ pub mod LeveragedMarket {
         }
         /// What burning `lp_shares` pays, computed the way `remove_liquidity` computes it.
         ///
-        /// Deliberately the same `mul_div` in the same order rather than a fresh formula, so a quote
-        /// cannot round differently from the withdrawal it is quoting. An empty vault quotes zero
-        /// instead of dividing by zero.
+        /// Deliberately the same `mul_div` in the same order rather than a fresh formula, so a
+        /// quote cannot round differently from the withdrawal it is quoting. An empty vault quotes
+        /// zero instead of dividing by zero.
         fn quote_remove_liquidity(self: @ContractState, lp_shares: u128) -> (u128, bool) {
             let total = self.vault_shares_total.read();
             if total == 0 || lp_shares == 0 {
