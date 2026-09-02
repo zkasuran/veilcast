@@ -33,14 +33,14 @@ export default function Page() {
 
       <header className={styles.hero}>
         <h1 className={styles.heroTitle}>
-          Visible odds
+          Delegate execution.
           <br />
-          <span className={styles.heroAccent}>Invisible bettors</span>
+          <span className={styles.heroAccent}>Never custody.</span>
         </h1>
         <p className={styles.heroSub}>
-          A prediction market where the volume is public, so the price means something, and the
-          bettors are not, so the price stays honest. Stakes and payouts move through the STRK20
-          privacy pool.
+          A private prediction market where the volume is public, so the price means something, while the
+          bettors are not, so the price stays honest. Trade it with leverage. Or hand an agent a bounded
+          mandate to close for you. The contract makes it unable to take your money.
         </p>
       </header>
 

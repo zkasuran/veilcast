@@ -1,6 +1,6 @@
 # Veilcast for agents
 
-Trade and manage positions on Veilcast, a private prediction market on Starknet's STRK20 privacy pool, headlessly. Identity is private, amounts are public. An agent can hold a bounded mandate to close a position on an owner's behalf without ever being able to redirect the money.
+Trade Veilcast headlessly: a private, leveraged prediction market on Starknet's STRK20 privacy pool. Identity is private, amounts are public. You can hold a bounded mandate to close a position on an owner's behalf. The contract then makes three things impossible: redirecting the money, acting outside the price band you were granted, widening your own authority.
 
 Network: mainnet. Every command prints one JSON object on stdout; progress goes to stderr.
 

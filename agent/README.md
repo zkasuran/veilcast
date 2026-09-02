@@ -1,7 +1,11 @@
 # veilcast-agent
 
-> Drive [Veilcast](https://github.com/zkasuran/veilcast), a private prediction market on Starknet's
-> STRK20 privacy pool, from an autonomous agent. No browser, no wallet extension, no human in the loop.
+### Delegate execution. Never custody.
+
+> Drive [Veilcast](https://github.com/zkasuran/veilcast), a private and leveraged prediction market on
+> Starknet's STRK20 privacy pool, from an autonomous agent. No browser, no wallet extension, no human in
+> the loop. You can be given the power to close someone's position without ever being given the power to
+> take their money.
 
 ```bash
 npx veilcast-agent markets        # the live mainnet board, with odds and payout multiples

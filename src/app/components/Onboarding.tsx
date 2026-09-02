@@ -22,11 +22,16 @@ const STEPS: { title: string; body: string }[] = [
         title: "Amounts are public, on purpose",
         body: "A market with hidden sizes cannot produce real odds. Veilcast hides who, never how much. Read the repo before you trust that, and never treat a shield deposit as private.",
     },
+    {
+        title: "Let an agent trade, without giving it custody",
+        body: "On a leveraged position you can name an agent, a price band and a payout address. The agent can then close for you while you are offline and nothing else: the contract pays the address you pinned, while its request carries no recipient at all. Hand out the agent key freely. The worst it buys is a stop you already asked for.",
+    },
 ];
 
-/// A one-time walkthrough of the one thing that surprises people: the split between what is public
-/// (amounts, odds, resolutions) and what is not (who). Shown once per browser, dismissable, and
-/// re-openable from the footer, so it informs without nagging.
+/// A one-time walkthrough of the two things that surprise people: the split between what is public
+/// (amounts, odds, resolutions) and what is not (who), then the fact that an agent can be given the
+/// power to close a position without being given the power to take the money. Shown once per browser,
+/// dismissable and re-openable from the footer, so it informs without nagging.
 export default function Onboarding() {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState(0);

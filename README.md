@@ -4,9 +4,16 @@
 
 <h1 align="center">Veilcast</h1>
 
+<h3 align="center">Delegate execution. Never custody.</h3>
+
 <p align="center">
-  <strong>Private prediction markets on Starknet.</strong><br />
-  <em>Visible odds, invisible bettors, plus an agent that can trade for you without being able to take your money.</em>
+  <strong>A private, leveraged prediction market on Starknet that an AI agent can trade for you,<br />
+  and structurally cannot steal from.</strong>
+</p>
+
+<p align="center">
+  <sub>Visible odds, invisible bettors (RFP-07), plus the part nobody else built:<br />
+  a bounded authority you hand an agent, enforced by the contract rather than by trust.</sub>
 </p>
 
 <p align="center">
@@ -53,11 +60,22 @@
 | **Published** | [`veilcast-agent`](https://www.npmjs.com/package/veilcast-agent) and [`veilcast-sdk`](https://www.npmjs.com/package/veilcast-sdk) are on npm, so `npx veilcast-agent markets` works from a bare shell |
 | **Stack** | Cairo 2.20 · Next.js 16 · TypeScript · a dependency-light Node agent runtime · STRK20 Wallet API · Pragma |
 
-**The one-minute version.** A prediction market only means something if its price signal is honest, and
-an honest signal needs open volume. It breaks when whales can be tracked. STRK20 gives exactly the split
-that fixes it: amounts public, identities private. On top of that we built leverage that cannot drain the
-contract, then a **mandate**: a bounded authority you hand an agent so it can fire your stop while you
-sleep and can do nothing else. Not by convention. By the contract.
+### The idea in three sentences
+
+**1.** A prediction market is only worth reading when its price signal is honest. An honest signal
+needs open volume, which breaks the moment whales can be tracked. STRK20 gives exactly the split that
+fixes it: **amounts public so the odds are real, identities private so the flow stays honest.**
+
+**2.** On top of that we built leverage, priced by an auditable integer AMM, where reserves are backed
+one for one so the contract itself cannot be drained.
+
+**3.** Then the part nobody else built. You can hand an untrusted agent the ability to close your
+position. It **cannot take your money.** Not because it promises not to: the contract reads the payout
+address from storage, so the agent's calldata has nowhere to put a recipient.
+
+That is the whole product: **delegate execution, never custody.** A stolen agent key buys an attacker
+nothing but doing what you already asked for, at a price the market actually reached, paying your own
+address.
 
 ## What it is
 
