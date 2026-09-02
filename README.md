@@ -20,7 +20,7 @@
   <a href="https://zkasuran.github.io/veilcast/"><img src="https://img.shields.io/badge/demo-live%20on%20mainnet-brightgreen?style=flat-square" alt="Live demo" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/contracts.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/contracts.yml?label=cairo&style=flat-square" alt="Cairo tests" /></a>
   <a href="https://github.com/zkasuran/veilcast/actions/workflows/pages.yml"><img src="https://img.shields.io/github/actions/workflow/status/zkasuran/veilcast/pages.yml?label=web&style=flat-square" alt="Web build" /></a>
-  <img src="https://img.shields.io/badge/tests-265%20passing-brightgreen?style=flat-square" alt="265 tests" />
+  <img src="https://img.shields.io/badge/tests-272%20passing-brightgreen?style=flat-square" alt="272 tests" />
   <img src="https://img.shields.io/badge/agent-Claude%20Code%20%C2%B7%20openclaw%20%C2%B7%20Hermes-8b5cf6?style=flat-square" alt="Agent skills" />
   <a href="https://www.npmjs.com/package/veilcast-agent"><img src="https://img.shields.io/npm/v/veilcast-agent?style=flat-square&label=veilcast-agent" alt="veilcast-agent on npm" /></a>
   <a href="https://www.npmjs.com/package/veilcast-sdk"><img src="https://img.shields.io/npm/v/veilcast-sdk?style=flat-square&label=veilcast-sdk" alt="veilcast-sdk on npm" /></a>
@@ -52,11 +52,11 @@
 |---|---|
 | **What** | A parimutuel prediction market where amounts are public (so the odds are honest) and identities are private (so the flow is honest) |
 | **RFP match** | [RFP-07: prediction markets with visible odds and invisible bettors](https://strk20.starknet.io/rfp/private-prediction-market) |
-| **Live on mainnet** | Market, Pragma resolver and committee resolver deployed. **Eight verified pool transactions.** Every claim re-derivable from chain by running one command |
+| **Live on mainnet** | Market, Pragma resolver and committee resolver deployed. **Twelve pool transactions, three of which score** under the program's rule that a transaction must carry an event from a contract we list. Every claim re-derivable from chain by running one command |
 | **Novel design** | Bearer coupons (the position *is* the key) · dual resolution (oracle plus juror committee) · a leveraged FPMM book with a keeper-liquidated vault · **on-chain mandates: an agent trades for you and structurally cannot take your money** |
 | **Agent-drivable** | The only entry in the field an autonomous agent can drive on mainnet with no browser. Ships skills for Claude Code, openclaw and Hermes |
 | **Verify us, do not trust us** | `node agent/cli.mjs verify` re-derives every recorded transaction and class hash straight from chain, then exits non-zero if one fails |
-| **Tests** | **265 green.** 66 Cairo with zero warnings (12 of them fuzz), 141 TypeScript, 58 agent runtime |
+| **Tests** | **272 green.** 66 Cairo with zero warnings (12 of them fuzz), 141 TypeScript, 65 agent runtime |
 | **Published** | [`veilcast-agent`](https://www.npmjs.com/package/veilcast-agent) and [`veilcast-sdk`](https://www.npmjs.com/package/veilcast-sdk) are on npm, so `npx veilcast-agent markets` works from a bare shell |
 | **Stack** | Cairo 2.20 · Next.js 16 · TypeScript · a dependency-light Node agent runtime · STRK20 Wallet API · Pragma |
 
@@ -307,10 +307,10 @@ unlocked headless mainnet, then cost us a rule per failure:
 | `INDEX_NOT_SEQUENTIAL` | poll discovery between deposits; never sleep and hope |
 
 Every one of those now lives once, in [`agent/src/pool.mjs`](agent/src/pool.mjs), so nobody has to
-rediscover them. A register, five shields and a real private bet landed, all eight verifiable from
-chain, with one honest finding alongside:
-the **payout leg still reverts on mainnet** with a proof-version mismatch upstream of us. It is
-documented in [OPERATIONS.md](docs/OPERATIONS.md) rather than hidden. It affects the whole program.
+rediscover them. A register, five shields and a real private bet landed, all verifiable from chain, with
+one honest finding alongside: the **payout leg still reverts on mainnet** with a proof-version mismatch
+upstream of us. It is documented in [OPERATIONS.md](docs/OPERATIONS.md) rather than hidden. It affects
+the whole program.
 
 ### Phase 4 · Leverage, Aug 26 to 27
 
@@ -412,6 +412,36 @@ cd cairo && node scripts/rehearse-devnet.mjs
 #  price crosses the band, agent fires → paid the pinned address, still solvent
 ```
 
+### Phase 7 · Making the transactions count, Sep 2
+
+The program does not score a pool transaction. It scores *your* pool transaction. The difference is
+a clause worth reading twice: if you list any contracts, a transaction must also carry an event from one
+of them, because touching the pool through someone else's contract is not your project running on
+mainnet.
+
+By that rule our eight recorded transactions were **one**. The register and the shields are real,
+successful pool actions that never touch our code. Listing a contract had quietly raised our own bar and
+we had been scoring ourselves against the easier one.
+
+Three things came out of fixing it:
+
+- **The board was dead.** Every market was past its `close_at`, so `do_bet` refused every bet before it
+  cost anything. Two fresh markets now close after judging, so a judge can bet on them too.
+- **`verify` was lying by omission.** It passed anything with a pool event, which would have reported
+  green on a submission that cannot score. It now reads the address list out of `strk20.json`, records
+  which of our contracts emitted, then separates a *false claim* (a reverted transaction, exit 5) from a
+  *shortfall* (an honest pool-only one, exit 2). The rule is a pure function with seven tests over it.
+- **Only the first ten hashes are read.** Our three qualifying transactions sat at indices 7, 8 and 9,
+  one append away from silently falling out of the window with no error anywhere. They lead the list
+  now, so `verify` mirrors the window rather than reporting a total the hub will not agree with.
+
+Two more bets landed, each carrying a pool event and a VeilcastMarket event. Three real failures
+went into the manual on the way: the allowance cannot ride inside a proof-carrying call, a pool action
+must be able to *reserve* the padded fee bound rather than merely pay the realized fee, and
+`autoSelectNotes: "all"` consumes the whole note so a second bet needs a second deposit. A run that dies
+after submitting also leaves real transactions and no local record, so two read-only recovery tools now
+exist: one walks the event log, the other walks blocks, which is the only way to see a revert.
+
 ---
 
 ## Tech stack
@@ -419,7 +449,7 @@ cd cairo && node scripts/rehearse-devnet.mjs
 | Layer | Technology |
 |---|---|
 | Contracts | Cairo 2.20 · Scarb · Starknet Foundry · **66 tests, 12 of them fuzz, zero warnings** |
-| Agent runtime | Node 20, one dependency (starknet.js) · **58 tests** · 20 verbs · JSON out, dry run by default |
+| Agent runtime | Node 20, one dependency (starknet.js) · **65 tests** · 20 verbs · JSON out, dry run by default |
 | Frontend | Next.js 16 · React 19 · CSS Modules · dark and light |
 | SDK | TypeScript · starknet.js 10 · framework-free · **141 tests** shared with the app |
 | Privacy | STRK20 pool · Wallet API in the browser · OHTTP proving and discovery headlessly |
@@ -433,15 +463,16 @@ cd cairo && node scripts/rehearse-devnet.mjs
 | | Status |
 |---|---|
 | Market contract plus two resolvers | ✅ live on Starknet mainnet, class hashes verified |
-| Mainnet pool transactions | ✅ **eight**: a register, five shields, a private bet, all with pool events |
-| `verify` re-derives every claim from chain | ✅ 11 of 11 pass |
+| Mainnet pool transactions | ✅ **twelve**, of which **three score**: three private bets that each carry a pool event and a VeilcastMarket event. The other nine are a register and shields, which touch the pool without touching our code |
+| `verify` re-derives every claim from chain | ✅ every recorded claim holds, then it reports which transactions score rather than passing anything with a pool event |
 | Web app: board, bets, positions, leverage, mandates | ✅ complete |
 | `veilcast-sdk` with pinned vectors | ✅ market and leverage |
 | Leveraged market: FPMM, vault, keeper, insurance | ✅ complete and fuzzed, **mainnet deploy pending** |
 | On-chain mandates, adversarially fuzzed | ✅ complete |
 | `veilcast-agent`, skills for three hosts | ✅ complete, 6 verbs already live against mainnet |
 | Manuals: integration, operations, security | ✅ complete |
-| Demo video | ⏳ after the leverage deploy |
+| Live markets a judge can bet on | ✅ two, both closing after judging |
+| Demo video | ⏳ next |
 
 The leverage contract is built, fuzzed and rehearsed against a real node. Its mainnet declare is the
 one remaining spend, so the Leverage tab honestly says "not deployed on this network yet" rather than
@@ -511,7 +542,7 @@ npm run dev                     # http://localhost:3000
 
 npm test                        # 141 TypeScript tests
 cd cairo && snforge test        # 66 Cairo tests, 12 of them fuzz
-cd agent && npm test            # 58 agent runtime tests
+cd agent && npm test            # 65 agent runtime tests
 
 npm run typecheck && npm run build
 ```
@@ -528,10 +559,21 @@ the other way round: it does its own proving over OHTTP, which is what makes it 
 node agent/cli.mjs verify --file strk20.json
 ```
 
-That fetches every recorded transaction receipt, asserts each one succeeded **and** that the STRK20
-pool emitted an event inside it, which is the program's own eligibility test rather than a proxy for it.
-Then it checks each contract's deployed class hash against the record. It exits non-zero if a single
-claim fails, so it works as a gate and not only as a report.
+That applies the program's own eligibility test rather than a proxy for it. Each recorded transaction
+must have succeeded, the STRK20 pool must have emitted an event inside it, then because we list
+contracts of our own, one of those must have emitted an event too. Touching the pool through someone else's
+contract is not our project running on mainnet, so a plain shield is reported as honest but not
+countable. Then it checks each contract's deployed class hash against the record.
+
+It distinguishes two kinds of failure, because they mean different things. A recorded transaction that
+reverted or does not exist is a false claim and exits 5. An honest transaction that simply does not reach
+the bar is a shortfall and exits 2. It also mirrors the hub's ten-hash window, so the total it reports is
+the total that scores:
+
+```json
+{ "transactionsListed": 12, "transactionsChecked": 10, "beyondTheWindow": 2,
+  "countable": 3, "required": 3, "clearsTheBar": true, "poolOnly": 7 }
+```
 
 ---
 
