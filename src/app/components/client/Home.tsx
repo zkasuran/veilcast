@@ -11,6 +11,7 @@ import ShellNav from "./ShellNav";
 import Dashboard from "./analytics/Dashboard";
 import AnalyticsPanel from "./analytics/AnalyticsPanel";
 import WatchlistPanel from "./analytics/WatchlistPanel";
+import DemoBanner from "./analytics/DemoBanner";
 import MarketsPanel from "./market/MarketsPanel";
 import PositionsPanel from "./market/PositionsPanel";
 import LeveragePanel from "./leverage/LeveragePanel";
@@ -44,6 +45,7 @@ export default function Home() {
             <BoardProvider>
                 <ShellNav />
 
+                <DemoBanner />
                 <Dashboard onExplore={() => setTab("markets")} />
                 <LiveTabs tab={tab} setTab={setTab} />
 

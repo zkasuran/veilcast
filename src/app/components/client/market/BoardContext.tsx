@@ -11,6 +11,7 @@ type BoardState = {
     refresh: () => Promise<void>;
     polling: boolean;
     lastUpdated: number;
+    demo: boolean;
 };
 
 const BoardContext = createContext<BoardState | undefined>(undefined);
@@ -35,6 +36,7 @@ export function BoardProvider({
                 refresh: board.refresh,
                 polling: board.polling,
                 lastUpdated: board.lastUpdated,
+                demo: board.demo,
             }}
         >
             {children}

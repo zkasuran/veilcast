@@ -109,6 +109,16 @@ keyless — no server, no API key, no model call:
 The analytics layer is called a "radar" on purpose: it is an ensemble of public-data facets, not an
 AI opinion. A thin book produces a low-conviction verdict, not a strong one.
 
+### Demo board
+
+The hosted project page and a fresh clone have **no deployed market address by default**, so the app
+would otherwise be a wall of empty states. To keep the frontend demoable, `useBoard` falls back to a
+seeded, client-side **demo board** when the current network has no `NEXT_PUBLIC_VEILCAST_MARKET_*` set.
+It is always labelled (DEMO pill, banner, "demo · not on chain", a DEMO dot in the nav) and never
+writes to or reads from the chain. Once a real market is configured, the demo disappears automatically
+and the live board takes over. Disable it with `veilcast.demoBoard = "off"` in localStorage, or set
+your market address in `.env.local` / repo variables.
+
 ---
 
 ## What it is
