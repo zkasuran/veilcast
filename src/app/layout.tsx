@@ -1,20 +1,9 @@
 import type { Metadata } from 'next'
-import { Inter, Space_Mono } from 'next/font/google'
 import './globals.css'
 
-// Clean neutral grotesque for everything (matches the Uniswap reference); a mono
-// only for hex addresses / hashes.
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-body',
-  display: 'swap',
-})
-const spaceMono = Space_Mono({
-  subsets: ['latin'],
-  weight: ['400', '700'],
-  variable: '--font-mono-ui',
-  display: 'swap',
-})
+// Fonts are self-contained system stacks (set in globals.css via --font-body / --font-mono-ui).
+// A static export must build identically offline, on GitHub Pages, IPFS or any CDN, without a
+// request to Google Fonts — so the layout does not fetch a webfont at build time.
 
 export const metadata: Metadata = {
   title: 'Veilcast · private prediction markets you or an agent can trade',
@@ -25,8 +14,6 @@ export const metadata: Metadata = {
 /**
  * Inline script that runs before React hydrates — reads localStorage and sets
  * data-theme on <html> so there's zero flash of wrong theme (FOWT).
- * Wrapped in a <script> tag with dangerouslySetInnerHTML because Next.js
- * static export cannot inject blocking scripts any other way.
  */
 const THEME_INIT_SCRIPT = `
 (function(){
@@ -48,7 +35,6 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${spaceMono.variable}`}
       suppressHydrationWarning
     >
       <head>

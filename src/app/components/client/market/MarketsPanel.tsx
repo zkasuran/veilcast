@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { num } from "starknet";
 import styles from "../../../uni.module.css";
+import { deriveAnalytics, type MarketAnalysis } from "@/utils/analytics";
+import { useWatchlist } from "../analytics/useWatchlist";
+import WatchStar from "../analytics/WatchStar";
 import {
     type BoardFilter,
     DEFAULT_FILTER,
@@ -19,7 +22,7 @@ import FeedSettle from "./FeedSettle";
 import MarketCard from "./MarketCard";
 import ResolverControls from "./ResolverControls";
 import { BoardSkeleton } from "../../Skeleton";
-import { useBoard } from "./useBoard";
+import { useBoardContext } from "./BoardContext";
 import { useStrk20 } from "../strk20/useStrk20";
 
 const STATUSES: { key: string; label: string }[] = [
@@ -33,9 +36,16 @@ const STATUSES: { key: string; label: string }[] = [
 /// The board: every market, its public volumes, and the bet form for whichever outcome is picked.
 export default function MarketsPanel() {
     const strk20 = useStrk20();
-    const { markets, error, loading, refresh } = useBoard();
+    const { markets, error, loading, refresh } = useBoardContext();
+    const watch = useWatchlist();
     const [selected, setSelected] = useState<{ marketId: number; outcome: number } | undefined>();
     const [filter, setFilter] = useState<BoardFilter>(DEFAULT_FILTER);
+
+    const readsByMarket = useMemo(() => {
+        const map = new Map<number, MarketAnalysis>();
+        for (const read of deriveAnalytics(markets)) map.set(read.marketId, read);
+        return map;
+    }, [markets]);
 
     function isResolver(view: MarketView): boolean {
         if (!strk20.address || view.state !== "Open") return false;
@@ -59,6 +69,13 @@ export default function MarketsPanel() {
         } catch {
             return false;
         }
+    }
+
+    function readNote(read: MarketAnalysis | undefined): string | undefined {
+        if (!read) return undefined;
+        return `${read.label} reads ${Math.round(read.implied * 100)}% · ${read.payout.toFixed(
+            2
+        )}x · conviction ${read.score}/100 · ${read.verdict}`;
     }
 
     if (!strk20.isStrk20Network) {
@@ -187,6 +204,8 @@ export default function MarketsPanel() {
                     onSelectOutcome={(outcome) =>
                         setSelected(outcome === undefined ? undefined : { marketId: view.id, outcome })
                     }
+                    watchNode={<WatchStar watched={watch.has(view.id)} onToggle={() => watch.toggle(view.id)} />}
+                    readNote={readNote(readsByMarket.get(view.id))}
                 >
                     {selected?.marketId === view.id ? (
                         <BetForm

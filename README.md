@@ -88,6 +88,29 @@ address.
 > us and runs end to end on Sepolia. That is documented in [OPERATIONS.md](docs/OPERATIONS.md) rather
 > than hidden. It affects every team on the program.
 
+## Frontend
+
+The web app stays a **static export** (GitHub Pages, IPFS or any CDN) and ships a neon, privacy-first
+dashboard on top of the same on-chain board. Everything below is client-side, deterministic and
+keyless — no server, no API key, no model call:
+
+- **Live dashboard.** A polling board (one shared reader, 15s) drives a hero with total staked,
+  open-market count, an aggregate read and a best-edge card, plus a scrolling radar ticker.
+- **Market radar.** Five on-chain facets per market — momentum, value, flow, risk, sentiment — are
+  derived from public volume into a conviction score, a verdict, an edge and a one-liner. Filter by
+  verdict, sort by conviction/edge/volume/close, and open any read for the full breakdown.
+- **Shortlist.** Follow any market with a ☆; the shortlist lives in `localStorage` per browser and
+  groups a market's live read with a link to its page. Nothing touches the chain.
+- **Live feed.** A board-wide activity panel streams every `BetPlaced` / resolution / claim across
+  all markets, newest first, with amounts and coupon keys and never an identity.
+- **Resilient build.** Fonts are self-contained system stacks, so `next build --webpack` runs fully
+  offline and reproduces on any static host.
+
+The analytics layer is called a "radar" on purpose: it is an ensemble of public-data facets, not an
+AI opinion. A thin book produces a low-conviction verdict, not a strong one.
+
+---
+
 ## What it is
 
 Veilcast is a prediction market where the crowd's information stays public while the crowd stays

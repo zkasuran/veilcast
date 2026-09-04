@@ -10,7 +10,7 @@ import PortfolioSummary from "./PortfolioSummary";
 import PositionRow from "./PositionRow";
 import VaultTools from "./VaultTools";
 import ResultCard from "../strk20/ResultCard";
-import { useBoard } from "./useBoard";
+import { useBoardContext } from "./BoardContext";
 import { usePositions } from "./usePositions";
 import { type ActionResult, useStrk20 } from "../strk20/useStrk20";
 
@@ -21,7 +21,7 @@ import { type ActionResult, useStrk20 } from "../strk20/useStrk20";
 /// risk, which is why the vault is one click from here.
 export default function PositionsPanel() {
     const strk20 = useStrk20();
-    const { markets, refresh: refreshBoard } = useBoard();
+    const { markets, refresh: refreshBoard } = useBoardContext();
     const positions = usePositions();
     const [result, setResult] = useState<ActionResult | null>(null);
     const [busy, setBusy] = useState(false);

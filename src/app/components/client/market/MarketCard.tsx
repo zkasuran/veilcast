@@ -23,6 +23,8 @@ export default function MarketCard({
     providerIndex,
     marketAddress,
     detailHref,
+    watchNode,
+    readNote,
     children,
 }: {
     view: MarketView;
@@ -32,6 +34,10 @@ export default function MarketCard({
     marketAddress: string;
     /// Where the question links to. Absent on the market's own page, where it would link to itself.
     detailHref?: string;
+    /// A follow star (shortlist) placed in the header.
+    watchNode?: ReactNode;
+    /// A one-line deterministic read, shown under the tags so the board carries its own signal.
+    readNote?: string;
     children?: ReactNode;
 }) {
     const now = Math.floor(Date.now() / 1000);
@@ -58,7 +64,10 @@ export default function MarketCard({
                         view.question
                     )}
                 </span>
-                <span className={`${styles.pill} ${statePill.tone}`}>{statePill.text}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {watchNode}
+                    <span className={`${styles.pill} ${statePill.tone}`}>{statePill.text}</span>
+                </div>
             </div>
             <div className={styles.marketTags}>
                 <span className={styles.tag}>{categoryLabel(view.category)}</span>
@@ -71,6 +80,8 @@ export default function MarketCard({
                     <span className={styles.tag}>no fee</span>
                 )}
             </div>
+
+            {readNote ? <div className={styles.marketSignal}>{readNote}</div> : null}
 
             <div className={styles.outcomes}>
                 {view.labels.map((label, outcome) => {

@@ -18,9 +18,13 @@ import OddsChart from "./OddsChart";
 import PositionRow from "./PositionRow";
 import ResolverControls from "./ResolverControls";
 import ResultCard from "../strk20/ResultCard";
+import MarketReadCard from "../analytics/MarketReadCard";
+import WatchStar from "../analytics/WatchStar";
+import { useWatchlist } from "../analytics/useWatchlist";
 import { useBoard } from "./useBoard";
 import { useMarketHistory } from "./useMarketHistory";
 import { usePositions } from "./usePositions";
+import { deriveAnalytics } from "@/utils/analytics";
 import { type ActionResult, shortHex, useStrk20 } from "../strk20/useStrk20";
 
 /// One market, deep-linkable, which is what a market gets shared as.
@@ -36,6 +40,7 @@ export default function MarketDetail() {
     const strk20 = useStrk20();
     const { markets, error, loading, refresh } = useBoard();
     const positions = usePositions(id);
+    const watch = useWatchlist();
     const [outcome, setOutcome] = useState<number | undefined>();
     const [copied, setCopied] = useState(false);
     const [feeBusy, setFeeBusy] = useState(false);
@@ -62,6 +67,7 @@ export default function MarketDetail() {
 
     const view = markets.find((market) => market.id === id);
     const history = useMarketHistory(id, view?.labels.length ?? 0);
+    const read = view ? deriveAnalytics([view])[0] : undefined;
 
     function isResolver(): boolean {
         if (!view || !strk20.address || view.state !== "Open") return false;
@@ -144,6 +150,7 @@ export default function MarketDetail() {
                 marketAddress={strk20.marketAddress}
                 selectedOutcome={outcome}
                 onSelectOutcome={setOutcome}
+                watchNode={<WatchStar watched={watch.has(view.id)} onToggle={() => watch.toggle(view.id)} />}
             >
                 {outcome !== undefined ? (
                     <BetForm
@@ -163,6 +170,17 @@ export default function MarketDetail() {
                 ) : null}
                 {isCommitteeBound() ? <CommitteeVote view={view} onSettled={refresh} /> : null}
             </MarketCard>
+
+            {read ? (
+                <div className={styles.detailSection}>
+                    <h2 className={styles.detailHead}>Radar read</h2>
+                    <MarketReadCard
+                        read={read}
+                        watched={watch.has(view.id)}
+                        onToggleWatch={watch.toggle}
+                    />
+                </div>
+            ) : null}
 
             <div className={styles.detailSection}>
                 <h2 className={styles.detailHead}>How the odds moved</h2>

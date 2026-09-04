@@ -72,6 +72,31 @@ export async function loadMarketEvents(
     return events;
 }
 
+/// Everything that happened on the whole board, newest first. Same wire format as a single market's
+/// history but with no market-id filter, so a dashboard can show the chain's pulse across markets.
+export async function loadBoardActivity(
+    provider: ProviderInterface,
+    address: string,
+    { chunkSize = 200, maxChunks = 12 }: { chunkSize?: number; maxChunks?: number } = {}
+): Promise<MarketEvent[]> {
+    const events: MarketEvent[] = [];
+    let continuationToken: string | undefined;
+    for (let chunk = 0; chunk < maxChunks; chunk += 1) {
+        const page = await provider.getEvents({
+            address,
+            from_block: { block_number: 0 },
+            to_block: "latest",
+            keys: [[], []],
+            chunk_size: chunkSize,
+            continuation_token: continuationToken,
+        });
+        events.push(...decodeEvents(page.events as RawEvent[]));
+        continuationToken = page.continuation_token;
+        if (!continuationToken) break;
+    }
+    return events.sort((left, right) => right.blockNumber - left.blockNumber);
+}
+
 /// Decodes raw events, dropping anything this app does not publish. An unknown selector is another
 /// contract's business, or a newer version of this one, and neither is an error.
 export function decodeEvents(raw: RawEvent[]): MarketEvent[] {
