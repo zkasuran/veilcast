@@ -5,7 +5,6 @@ import styles from "../../../uni.module.css";
 import neon from "../../../neon.module.css";
 import type { MarketEvent } from "@/utils/events";
 import type { MarketView } from "@/utils/market";
-import { createDemoActivity } from "@/utils/demoBoard";
 import { useStrk20 } from "../strk20/useStrk20";
 import { useBoardContext } from "./BoardContext";
 import { useBoardActivity } from "./useBoardActivity";
@@ -17,14 +16,10 @@ import ActivityFeed from "./ActivityFeed";
 export default function ActivityPanel() {
     const board = useBoardContext();
     const strk20 = useStrk20();
-    const chain = useBoardActivity(board.lastUpdated);
+    const { events, loading, error, reload } = useBoardActivity(board.lastUpdated);
     const byId = new Map(board.markets.map((view) => [view.id, view]));
 
-    const { events, loading, error, reload } = board.demo
-        ? { events: createDemoActivity(), loading: false, error: "", reload: () => Promise.resolve() }
-        : chain;
-
-    if (!strk20.hasMarket && !board.demo) {
+    if (!strk20.hasMarket) {
         return (
             <div className={styles.panelWide}>
                 <div className={styles.notice}>

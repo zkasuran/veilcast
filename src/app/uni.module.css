@@ -922,7 +922,7 @@
   margin-bottom: 14px;
 }
 
-.marketSignal {
+    .marketSignal {
   margin-top: 10px;
   padding: 8px 12px;
   border-left: 3px solid var(--accent);
@@ -932,49 +932,6 @@
   font-size: 12px;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
-}
-
-.demoPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 13px;
-  border: 1px solid var(--accent-soft-2);
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.demoBanner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-  padding: 12px 16px;
-  border: 1px solid var(--accent-soft-2);
-  border-radius: 16px;
-  background: var(--accent-soft);
-  color: var(--ink-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-.demoBanner b { color: var(--accent); }
-.demoBanner button {
-  margin-left: auto;
-  font-family: var(--font-body), sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent);
-  background: transparent;
-  border: 1px solid var(--accent-soft-2);
-  border-radius: 999px;
-  padding: 5px 12px;
-  cursor: pointer;
 }
 
 .marketTags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }

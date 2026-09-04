@@ -25,7 +25,6 @@ export default function MarketCard({
     detailHref,
     watchNode,
     readNote,
-    readOnly,
     children,
 }: {
     view: MarketView;
@@ -39,9 +38,6 @@ export default function MarketCard({
     watchNode?: ReactNode;
     /// A one-line deterministic read, shown under the tags so the board carries its own signal.
     readNote?: string;
-    /// Demo data: odds are shown, but outcomes are not selectable, there is no bet form, and the
-    /// on-chain contract link is hidden because nothing was deployed.
-    readOnly?: boolean;
     children?: ReactNode;
 }) {
     const now = Math.floor(Date.now() / 1000);
@@ -105,8 +101,8 @@ export default function MarketCard({
                                 lost ? styles.outcomeLost : "",
                             ].join(" ")}
                             onClick={() => onSelectOutcome(selected ? undefined : outcome)}
-                            disabled={!bettable || readOnly}
-                            title={readOnly ? "Demo market — connect to a deployed board to bet" : bettable ? `Bet on ${label}` : "This market is not taking bets"}
+                            disabled={!bettable}
+                            title={bettable ? `Bet on ${label}` : "This market is not taking bets"}
                         >
                             <span className={styles.outcomeTop}>
                                 <span className={styles.outcomeLabel}>{label}</span>
@@ -132,18 +128,14 @@ export default function MarketCard({
                 <span>market #{view.id}</span>
                 <span>pot {formatStrk(view.pot)} STRK</span>
                 <span>closes {new Date(view.closeAt * 1000).toLocaleString()}</span>
-                {readOnly ? (
-                    <span className={styles.marketLink}>demo · not on chain</span>
-                ) : (
-                    <a
-                        className={styles.marketLink}
-                        href={voyagerContractUrl(providerIndex, marketAddress)}
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        contract ↗
-                    </a>
-                )}
+                <a
+                    className={styles.marketLink}
+                    href={voyagerContractUrl(providerIndex, marketAddress)}
+                    target="_blank"
+                    rel="noreferrer"
+                >
+                    contract ↗
+                </a>
             </div>
 
             {children}

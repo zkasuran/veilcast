@@ -36,7 +36,7 @@ const STATUSES: { key: string; label: string }[] = [
 /// The board: every market, its public volumes, and the bet form for whichever outcome is picked.
 export default function MarketsPanel() {
     const strk20 = useStrk20();
-    const { markets, error, loading, refresh, demo } = useBoardContext();
+    const { markets, error, loading, refresh } = useBoardContext();
     const watch = useWatchlist();
     const [selected, setSelected] = useState<{ marketId: number; outcome: number } | undefined>();
     const [filter, setFilter] = useState<BoardFilter>(DEFAULT_FILTER);
@@ -89,7 +89,7 @@ export default function MarketsPanel() {
         );
     }
 
-    if (!strk20.hasMarket && !demo) {
+    if (!strk20.hasMarket) {
         return (
             <div className={styles.panelWide}>
                 <div className={styles.notice}>
@@ -119,11 +119,7 @@ export default function MarketsPanel() {
                 <button className={styles.btn} onClick={() => void refresh()} disabled={loading}>
                     {loading ? "Reading chain…" : "Refresh"}
                 </button>
-                {demo ? (
-                    <span className={styles.demoPill}>demo board</span>
-                ) : (
-                    <CreateMarket onCreated={refresh} />
-                )}
+                <CreateMarket onCreated={refresh} />
             </div>
 
             {sections.length > 1 ? (
@@ -212,9 +208,8 @@ export default function MarketsPanel() {
                     }
                     watchNode={<WatchStar watched={watch.has(view.id)} onToggle={() => watch.toggle(view.id)} />}
                     readNote={readNote(readsByMarket.get(view.id))}
-                    readOnly={demo}
                 >
-                    {!demo && selected?.marketId === view.id ? (
+                    {selected?.marketId === view.id ? (
                         <BetForm
                             view={view}
                             outcome={selected.outcome}

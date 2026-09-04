@@ -38,7 +38,7 @@ export default function MarketDetail() {
     const id = idParam !== null && /^\d+$/.test(idParam) ? Number(idParam) : undefined;
 
     const strk20 = useStrk20();
-    const { markets, error, loading, refresh, demo } = useBoard();
+    const { markets, error, loading, refresh } = useBoard();
     const positions = usePositions(id);
     const watch = useWatchlist();
     const [outcome, setOutcome] = useState<number | undefined>();
@@ -144,7 +144,6 @@ export default function MarketDetail() {
                 </button>
             </div>
 
-            {demo ? <span className={styles.demoPill}>demo market · not on chain</span> : null}
             <MarketCard
                 view={view}
                 providerIndex={strk20.providerIndex}
@@ -152,7 +151,6 @@ export default function MarketDetail() {
                 selectedOutcome={outcome}
                 onSelectOutcome={setOutcome}
                 watchNode={<WatchStar watched={watch.has(view.id)} onToggle={() => watch.toggle(view.id)} />}
-                readOnly={demo}
             >
                 {outcome !== undefined ? (
                     <BetForm
